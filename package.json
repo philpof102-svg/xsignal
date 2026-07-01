@@ -5,7 +5,7 @@
   "description": "x402-paid real-time X/social signal (scored + cited) for AI agents — an ingredient for the agentic economy on Base. Verify-only, never signs.",
   "scripts": {
     "start": "node app.js",
-    "test": "node signal.js && node tokenintel.js && node x402.js && node sources.js && node app.js --selftest"
+    "test": "node signal.js && node tokenintel.js && node brief.js && node x402.js && node sources.js && node app.js --selftest"
   },
   "engines": {
     "node": ">=18"
