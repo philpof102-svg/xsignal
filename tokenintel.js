@@ -11,7 +11,7 @@
  *                         pairCreatedAtMs, buys24, sells24, dex, url }
  */
 function buildTokenIntel(t, opts = {}) {
-  if (!t || !t.addr) return { addr: (t && t.addr) || null, found: false, flags: ['no-pool'], note: 'No DEX pool found for this token on Base — illiquid or not launched. Market data unavailable. Not investment advice.' };
+  if (!t || !t.addr || t.found === false) return { addr: (t && t.addr) || null, found: false, flags: ['no-pool'], note: 'No DEX pool found for this token on Base — illiquid, not launched, or data unavailable. Not investment advice.' };
   const now = Number.isInteger(opts.nowMs) ? opts.nowMs : Date.now();
   const ageH = Number.isFinite(t.pairCreatedAtMs) ? Math.max(0, Math.round((now - t.pairCreatedAtMs) / 3.6e6)) : null;
   const liq = Number(t.liquidityUsd) || 0;
@@ -55,6 +55,7 @@ if (require.main === module) {
   const iF = buildTokenIntel(fresh, { nowMs: NOW });
   const iS = buildTokenIntel(solid, { nowMs: NOW });
   const iN = buildTokenIntel(noneNoAddr, { nowMs: NOW });
+  const iFF = buildTokenIntel({ addr: '0xabc', found: false }, { nowMs: NOW }); // source said no pool
   const prev = previewTokenIntel(fresh, { nowMs: NOW });
 
   const checks = [
@@ -63,6 +64,7 @@ if (require.main === module) {
     ['solid deep token → flag established, no thin/new', iS.flags.includes('established') && !iS.flags.includes('thin-liquidity') && !iS.flags.includes('very-new')],
     ['turnover = 24h volume / liquidity', iF.turnover === Math.round((60000 / 4200) * 100) / 100],
     ['no token → found:false + no-pool flag (honest, not a fake score)', iN.found === false && iN.flags.includes('no-pool')],
+    ['source found:false → propagated as no-pool (not a bogus 0-liq intel)', iFF.found === false && iFF.flags.includes('no-pool') && iFF.liquidityUsd === undefined],
     ['flags are MARKET flags, note says NOT a safety/trust rating', /NOT a safety or trust rating/.test(iS.note)],
     ['preview: capped (no volume/flow) + upgrade hint', prev.preview === true && prev.volume24 === undefined && /x402/.test(prev.upgrade)],
     ['honesty: not investment advice + verify on-chain', /not investment advice/i.test(iS.note) && /verify on-chain/i.test(iS.note)],
