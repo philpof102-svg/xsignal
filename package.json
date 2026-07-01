@@ -1,15 +1,57 @@
 {
-  "name": "xsignal",
-  "version": "0.1.0",
-  "private": true,
-  "description": "x402-paid real-time X/social signal (scored + cited) for AI agents — an ingredient for the agentic economy on Base. Verify-only, never signs.",
+  "name": "@raskhaaa/xsignal",
+  "version": "0.2.0",
+  "mcpName": "io.github.philpof102-svg/xsignal",
+  "description": "Pay-per-call data ingredients for AI agents on Base (x402/USDC). Flagship get_intent: the only x402 signal that ABSTAINS below your confidence bar instead of guessing. Also a fused token brief, cited X/social signal, and Base token market intel. 3 free calls per wallet, then from $0.01. Verify-only, never signs.",
+  "main": "sdk/index.js",
+  "exports": {
+    ".": "./sdk/index.js",
+    "./tools": "./sdk/tools.js"
+  },
+  "bin": {
+    "xsignal-mcp": "scripts/mcp-server.js"
+  },
+  "files": [
+    "sdk/",
+    "scripts/mcp-server.js",
+    "examples/",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node app.js",
     "example": "node examples/watchlist-alerter.js",
-    "test": "node signal.js && node tokenintel.js && node brief.js && node intent.js && node x402.js && node sources.js && node app.js --selftest"
+    "mcp": "node scripts/mcp-server.js",
+    "test": "node signal.js && node tokenintel.js && node brief.js && node intent.js && node x402.js && node sources.js && node sdk/tools.test.js && node app.js --selftest"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "x402",
+    "base",
+    "base-mainnet",
+    "ai-agents",
+    "crypto-signal",
+    "token-intel",
+    "abstention",
+    "momentum",
+    "onchain",
+    "usdc",
+    "dexscreener",
+    "agent-tools"
+  ],
+  "license": "MIT",
   "engines": {
     "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/philpof102-svg/xsignal"
+  },
+  "homepage": "https://xsignal-production.up.railway.app",
+  "bugs": {
+    "url": "https://github.com/philpof102-svg/xsignal/issues"
   },
   "dependencies": {
     "@coinbase/x402": "^2.1.0"

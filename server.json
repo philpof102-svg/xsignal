@@ -1,14 +1,44 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.philpof102-svg/xsignal",
-  "description": "x402-paid X/social signal + Base token market intel for AI agents. Pay-per-call USDC, free preview.",
+  "description": "Pay-per-call data ingredients for AI agents on Base. Flagship get_intent ABSTAINS below your confidence bar instead of guessing. Plus a fused token brief, cited X/social signal, Base token market intel. x402/USDC, 3 free calls per wallet.",
   "status": "active",
   "repository": {
     "url": "https://github.com/philpof102-svg/xsignal",
     "source": "github"
   },
-  "version": "0.1.0",
-  "packages": [],
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@raskhaaa/xsignal",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "@raskhaaa/xsignal",
+          "valueHint": "package-name"
+        },
+        {
+          "type": "positional",
+          "value": "xsignal-mcp",
+          "valueHint": "bin-name"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "XSIGNAL_WALLET",
+          "description": "Your 0x Base address for 3 free calls per wallet; beyond that the tools return an x402 pay pointer.",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
