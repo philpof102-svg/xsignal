@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.philpof102-svg/xsignal",
+  "description": "x402-paid data ingredients for AI agents on Base: real-time X/social signal (scored + cited) + Base token market intel (liquidity/volume/price/age/flow). Pay per call in USDC; free preview. Verify-only, never signs.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/philpof102-svg/xsignal",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://xsignal-production.up.railway.app/mcp"
+    }
+  ]
+}

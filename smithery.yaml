@@ -1,0 +1,49 @@
+version: 1
+type: http
+runtime: container
+
+startCommand:
+  type: http
+  url: https://xsignal-production.up.railway.app/mcp
+
+metadata:
+  displayName: xsignal
+  description: |
+    x402-paid data ingredients for AI agents on Base — pay a few cents per call in USDC:
+      - get_signal      — real-time X/social signal for a topic (scored: virality + freshness, CITED to sources)
+      - get_token_intel — Base token market intel (liquidity, 24h volume, price + change, pool age, buy/sell flow + flags)
+    Both have a FREE preview (/signal/preview, /token/preview); the full result is x402-paid (/signal, /token).
+    Verify-only — we never sign or move funds; we receive USDC to payTo. Market data, not a trust/safety rating.
+  homepage: https://xsignal-production.up.railway.app
+  repository: https://github.com/philpof102-svg/xsignal
+  license: MIT
+  author: Phil
+  keywords:
+    - x402
+    - signal
+    - token
+    - base
+    - agents
+    - usdc
+    - mcp
+    - defi
+  categories:
+    - finance
+    - data
+
+  examples:
+    - name: Base token market intel (free preview)
+      input:
+        tool: get_token_intel
+        args:
+          addr: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
+      output:
+        symbol: "DEGEN"
+        liquidityUsd: 1316032
+        flags: ["established"]
+
+  payment:
+    protocol: x402
+    network: base
+    asset: USDC
+    freePreview: true
