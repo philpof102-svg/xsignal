@@ -22,6 +22,7 @@ const { paymentRequired, verifyPayment, net } = require('./x402');
 const { fetchCandidates, fetchDexScreener } = require('./sources');
 
 const PAY_TO = process.env.XSIGNAL_PAYTO || '0xAC3ca7c5d3cDD7702fd08F9C4C28dAA22296aDa9'; // receives USDC; public addr, no key
+const PUBLIC_URL = (process.env.XSIGNAL_PUBLIC_URL || 'https://xsignal-production.up.railway.app').replace(/\/$/, ''); // canonical URL used as the x402 'resource' → the CDP Bazaar catalogs a callable endpoint on first settlement
 const PRICE_USD = Number(process.env.XSIGNAL_PRICE_USD || 0.01);
 const BRIEF_PRICE_USD = Number(process.env.XSIGNAL_BRIEF_PRICE_USD || 0.05); // the fused brief is a "meal" (does the chaining an agent would) → priced above a single ingredient
 const INTENT_PRICE_USD = Number(process.env.XSIGNAL_INTENT_PRICE_USD || 0.01); // outcome-priced momentum verdict, pay-first (the fee IS the no-fill fee); FLAT price, floor $0.01
@@ -107,7 +108,7 @@ async function dispatch(msg) {
     const name = params && params.name;
     const a = (params && params.arguments) || {};
     // NO FREE TIER: MCP tools return an x402 PAYMENT POINTER (price + accepts + how to pay), not free data.
-    const PAID = { get_signal: ['/signal', PRICE_USD, 'xsignal - real-time X/social signal'], get_token_intel: ['/token', PRICE_USD, 'xsignal - Base token market intel'], get_token_brief: ['/brief', BRIEF_PRICE_USD, 'xsignal - fused token brief (meal)'], get_intent: ['/intent', INTENT_PRICE_USD, 'xsignal - outcome-priced momentum verdict (may abstain)'] };
+    const PAID = { get_signal: [PUBLIC_URL + '/signal', PRICE_USD, 'xsignal - real-time X/social signal'], get_token_intel: [PUBLIC_URL + '/token', PRICE_USD, 'xsignal - Base token market intel'], get_token_brief: [PUBLIC_URL + '/brief', BRIEF_PRICE_USD, 'xsignal - fused token brief (meal)'], get_intent: [PUBLIC_URL + '/intent', INTENT_PRICE_USD, 'xsignal - outcome-priced momentum verdict (may abstain)'] };
     if (PAID[name]) {
       const [resource, price, description] = PAID[name];
       const reqs = paymentRequired({ priceUsd: price, payTo: PAY_TO, resource, description, network: X402_NETWORK });
@@ -147,7 +148,7 @@ function createServer() {
         const a = req.method === 'POST' ? (await body(req) || {}) : { query: qs.get('q'), source: qs.get('source'), limit: qs.get('limit') };
         const probe = grantProbe(a.wallet || qs.get('wallet'));
         if (probe) { const { candidates, live, note } = await getCandidates(a); return json(res, 200, { ...buildSignal(candidates, opForA(a)), live, source_note: note, probe }); }
-        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/signal', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: PUBLIC_URL + '/signal', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason }); // pay, then resubmit with X-PAYMENT
         const { candidates, live, note } = await getCandidates(a);
@@ -159,7 +160,7 @@ function createServer() {
         const a = req.method === 'POST' ? (await body(req) || {}) : { addr: qs.get('addr'), wallet: qs.get('wallet') };
         const probe = grantProbe(a.wallet || qs.get('wallet'));
         if (probe) return json(res, 200, { ...buildTokenIntel(await getToken(a.addr)), probe });
-        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal - Base token market intel', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: PUBLIC_URL + '/token', description: 'xsignal - Base token market intel', network: X402_NETWORK });
         const v = await verifyPayment(req.headers["x-payment"], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         return json(res, 200, { ...buildTokenIntel(await getToken(a.addr)), paid: true });
@@ -170,7 +171,7 @@ function createServer() {
         const a = req.method === 'POST' ? (await body(req) || {}) : { addr: qs.get('addr'), query: qs.get('q'), wallet: qs.get('wallet') };
         const probe = grantProbe(a.wallet || qs.get('wallet'));
         if (probe) { const { intel, signal, query, live, note } = await getBrief(a.addr, a.query); return json(res, 200, { ...buildBrief({ intel, signal, symbol: intel.symbol, query }), live, source_note: note, probe }); }
-        const reqs = paymentRequired({ priceUsd: BRIEF_PRICE_USD, payTo: PAY_TO, resource: '/brief', description: 'xsignal - fused token brief (market intel + social signal)', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: BRIEF_PRICE_USD, payTo: PAY_TO, resource: PUBLIC_URL + '/brief', description: 'xsignal - fused token brief (market intel + social signal)', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         const { intel, signal, query, live, note } = await getBrief(a.addr, a.query);
@@ -184,7 +185,7 @@ function createServer() {
         const minConfidence = a.min_confidence != null ? a.min_confidence : a.minConfidence;
         const probe = grantProbe(a.wallet || qs.get('wallet'));
         if (probe) { const { intel, signal, query } = await getBrief(a.addr, a.question); const payload = buildIntent({ intel, signal, question: a.question || query || null, minConfidence, price: INTENT_PRICE_USD }); const receipt = makeReceipt({ addr: a.addr, question: payload.question, minConfidence: payload.minConfidence }, payload, null); recordVerdict(payload, a.addr); return json(res, 200, { ...payload, receipt, probe }); }
-        const reqs = paymentRequired({ priceUsd: INTENT_PRICE_USD, payTo: PAY_TO, resource: '/intent', description: 'xsignal - outcome-priced momentum verdict (may abstain)', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: INTENT_PRICE_USD, payTo: PAY_TO, resource: PUBLIC_URL + '/intent', description: 'xsignal - outcome-priced momentum verdict (may abstain)', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         const { intel, signal, query } = await getBrief(a.addr, a.question);
