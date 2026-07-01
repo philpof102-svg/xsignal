@@ -1,0 +1,166 @@
+'use strict';
+/**
+ * xsignal — app.js  (the deployable x402-paid "signal" ingredient for the agentic economy)
+ * ========================================================================================
+ * Agents (and humans) get a fresh, scored, CITED real-time X/social signal instead of stale training data.
+ *   GET  /signal/preview?q=<topic>   → FREE capped preview (top 3, scores only)
+ *   GET  /signal?q=<topic>           → x402-PAID full signal (402 + accepts until paid; verify via facilitator)
+ *   POST /signal                     → paid; body {candidates?|query, terms?, source?, limit?}
+ *   POST /mcp                        → MCP tool get_signal (streamable-http)
+ *   GET  /health · /.well-known/mcp.json · /.well-known/agent-card.json
+ * 🛑 SAFE: WE never sign / move funds. x402 = we RECEIVE USDC (verify-only). Live fetch gated on X_BEARER_TOKEN /
+ * XAI_API_KEY (no key → a small DEMO seed so the preview always renders). `node app.js --selftest` tests it.
+ */
+const http = require('http');
+const { buildSignal, previewSignal } = require('./signal');
+const { paymentRequired, verifyPayment } = require('./x402');
+const { fetchCandidates } = require('./sources');
+
+const PAY_TO = process.env.XSIGNAL_PAYTO || '0xAC3ca7c5d3cDD7702fd08F9C4C28dAA22296aDa9'; // receives USDC; public addr, no key
+const PRICE_USD = Number(process.env.XSIGNAL_PRICE_USD || 0.01);
+const FACILITATOR_URL = process.env.FACILITATOR_URL || ''; // e.g. Coinbase CDP facilitator; empty → paid route stays 402
+const FACILITATOR_KEY = process.env.FACILITATOR_KEY || '';
+const SERVER = { name: 'xsignal', version: '0.1.0' };
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type, authorization, x-payment, mcp-protocol-version' };
+const json = (res, code, obj, extra) => { res.writeHead(code, { 'content-type': 'application/json', ...CORS, ...(extra || {}) }); res.end(JSON.stringify(obj)); };
+const body = (req) => new Promise((r) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 1e6) req.destroy(); }); req.on('end', () => { try { r(b ? JSON.parse(b) : {}); } catch { r(null); } }); });
+
+// small DEMO seed so /signal/preview always renders even with no API keys (clearly labelled demo)
+const SEED = [
+  { id: 'demo1', text: 'BREAKING: major L2 airdrop just went live, gas spiking on Base', author: 'onchain_alpha', likes: 42000, retweets: 9100, replies: 2600, verified: true },
+  { id: 'demo2', text: 'this memecoin just did 40x in an hour, CT is losing it', author: 'degen_news', likes: 31000, retweets: 7200, replies: 4100 },
+  { id: 'demo3', text: 'new Clanker token trending, volume ripping on Base', author: 'base_daily', likes: 8800, retweets: 1500, replies: 600 },
+];
+
+async function getCandidates(a) {
+  if (Array.isArray(a.candidates) && a.candidates.length) return { candidates: a.candidates, live: false };
+  const key = process.env.X_BEARER_TOKEN || process.env.XAI_API_KEY;
+  if (key) {
+    try { const c = await fetchCandidates(a.query || 'crypto', { source: process.env.XAI_API_KEY && !process.env.X_BEARER_TOKEN ? 'grok' : a.source, bearerToken: process.env.X_BEARER_TOKEN, apiKey: process.env.XAI_API_KEY, max: 25 }); return { candidates: c, live: true }; }
+    catch (e) { return { candidates: SEED, live: false, note: 'live fetch failed (' + e.message + ') — showing demo seed' }; }
+  }
+  return { candidates: SEED, live: false, note: 'no X_BEARER_TOKEN / XAI_API_KEY set — showing demo seed' };
+}
+const opForA = (a) => ({ query: a.query || null, terms: Array.isArray(a.terms) ? a.terms : (a.query ? String(a.query).split(/\s+/) : []), limit: Math.min(Number(a.limit) || 10, 25), minScore: a.minScore });
+
+const TOOLS = [{ name: 'get_signal', description: 'Real-time X/social signal for a topic: scored (virality+freshness) + CITED (source urls), deduped, ranked. Input: query (string) OR candidates[] (bring your own posts), terms?, source?(xsearch|grok), limit?. The live full signal is x402-paid at GET/POST /signal; this tool returns a preview unless candidates are supplied.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, candidates: { type: 'array' }, terms: { type: 'array' }, source: { type: 'string' }, limit: { type: 'integer' } } } }];
+
+async function dispatch(msg) {
+  const { id, method, params } = msg || {};
+  if (id === undefined || id === null) return null;
+  const ok = (result) => ({ jsonrpc: '2.0', id, result });
+  if (method === 'initialize') return ok({ protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: SERVER });
+  if (method === 'tools/list') return ok({ tools: TOOLS });
+  if (method === 'ping') return ok({});
+  if (method === 'tools/call') {
+    const a = (params && params.arguments) || {};
+    if ((params && params.name) !== 'get_signal') return { jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown tool' } };
+    const { candidates } = await getCandidates(a);
+    const payload = Array.isArray(a.candidates) && a.candidates.length ? buildSignal(candidates, opForA(a)) : previewSignal(candidates, opForA(a));
+    return ok({ content: [{ type: 'text', text: JSON.stringify(payload) }], isError: false });
+  }
+  return { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found' } };
+}
+
+function createServer() {
+  return http.createServer(async (req, res) => {
+    const url = (req.url || '/').split('?')[0];
+    const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
+    try {
+      if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
+      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoute: '/signal', freeRoute: '/signal/preview', payTo: PAY_TO, priceUsd: PRICE_USD, facilitatorConfigured: !!FACILITATOR_URL });
+
+      if (url === '/mcp') {
+        if (req.method !== 'POST') return json(res, 405, { error: 'POST JSON-RPC to /mcp' }, { allow: 'POST' });
+        const m = await body(req); if (m === null) return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } });
+        const r = await dispatch(m); if (r === null) { res.writeHead(202, CORS); return res.end(); } return json(res, 200, r);
+      }
+
+      // FREE preview (open) — capped, scores only
+      if (url === '/signal/preview') {
+        const a = req.method === 'POST' ? (await body(req) || {}) : { query: qs.get('q'), source: qs.get('source'), limit: qs.get('limit') };
+        const { candidates, live, note } = await getCandidates(a);
+        const p = previewSignal(candidates, opForA(a));
+        return json(res, 200, { ...p, live, source_note: note });
+      }
+
+      // x402-PAID full signal
+      if (url === '/signal') {
+        const a = req.method === 'POST' ? (await body(req) || {}) : { query: qs.get('q'), source: qs.get('source'), limit: qs.get('limit') };
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/signal' });
+        const payHeader = req.headers['x-payment'];
+        const v = await verifyPayment(payHeader, { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
+        if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason }); // pay, then resubmit with X-PAYMENT
+        const { candidates, live, note } = await getCandidates(a);
+        return json(res, 200, { ...buildSignal(candidates, opForA(a)), live, source_note: note, paid: true });
+      }
+
+      if (req.method === 'GET' && url === '/.well-known/mcp.json') return json(res, 200, { name: SERVER.name, version: SERVER.version, protocolVersion: '2024-11-05', description: 'xsignal — x402-paid real-time X/social signal (scored + cited) for agents.', mcp: { endpoint: baseUrl(req) + '/mcp', transport: 'streamable-http' }, tools: TOOLS.map((t) => ({ name: t.name, description: t.description })), paid: { route: '/signal', priceUsd: PRICE_USD, asset: 'USDC', network: 'base', freePreview: '/signal/preview' } });
+      if (req.method === 'GET' && url === '/.well-known/agent-card.json') return json(res, 200, agentCard(baseUrl(req)));
+
+      if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...CORS }); return res.end(landing()); }
+      return json(res, 404, { error: 'not found' });
+    } catch (e) { return json(res, 400, { error: e.message }); }
+  });
+}
+
+const baseUrl = (req) => (req.headers['x-forwarded-proto'] || 'https') + '://' + (req.headers.host || 'localhost');
+function agentCard(base) {
+  return { $schema: 'https://eips.ethereum.org/EIPS/eip-8004#agent-card', name: 'xsignal', description: 'x402-paid real-time X/social signal (scored + cited) for agents. Pay per call in USDC on Base; free preview available.', url: base,
+    mcp: { endpoint: base + '/mcp', transport: 'streamable-http' },
+    skills: [{ id: 'real-time-signal', primary: true, name: 'Real-time X/social signal', description: 'Fresh, scored (virality+freshness), cited social signal for a topic. Full signal x402-paid; free preview at /signal/preview.', endpoint: base + '/signal', method: 'GET', pricing: { scheme: 'x402-exact', amount: String(PRICE_USD), currency: 'USDC', network: 'eip155:8453' }, tags: ['x402', 'signal', 'x', 'social', 'realtime', 'base'] }],
+    payment: { protocol: 'x402', network: 'base', asset: 'USDC', payTo: PAY_TO }, safety: { descriptorOnly: true, signsFunds: false } };
+}
+function landing() {
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal — real-time signal for agents</title>
+<style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf4;margin:0;padding:40px 20px;max-width:680px;margin:0 auto;line-height:1.6}
+code{background:#1a2137;padding:2px 7px;border-radius:6px;font-size:13px}.t{background:#131a2e;border:1px solid #26304d;border-radius:14px;padding:18px;margin:14px 0}
+h1{font-size:26px}.px{color:#6ee7b7;font-weight:700}a{color:#7aa2ff}</style></head><body>
+<h1>⚡ xsignal</h1><p>A real-time X/social <b>signal</b> for AI agents — scored (virality + freshness) and <b>cited</b>,
+instead of stale training data or generic search. Pay per call in <span class="px">USDC on Base via x402</span>. An
+ingredient for the agentic economy.</p>
+<div class="t"><b>Free preview</b><br/><code>GET /signal/preview?q=base+memecoin</code> — top 3, scores only.</div>
+<div class="t"><b>Full signal (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /signal?q=base+memecoin</code> — 402 until paid; full text, metrics, all items + citations.</div>
+<div class="t"><b>Agents</b> — MCP at <code>/mcp</code> (tool <code>get_signal</code>), discovery at <code>/.well-known/mcp.json</code> + <code>/.well-known/agent-card.json</code>.</div>
+<p style="color:#8a97b5;font-size:13px">Signal is scored from public X posts — verify before acting; not financial advice. We never hold keys or move funds.</p></body></html>`;
+}
+
+module.exports = { createServer, dispatch, TOOLS };
+
+if (require.main === module) {
+  if (!process.argv.includes('--selftest')) {
+    createServer().listen(process.env.PORT || 4520, () => console.log('xsignal live on :' + (process.env.PORT || 4520) + ' (/signal paid · /signal/preview free · /mcp · /health)'));
+  } else {
+    const srv = createServer();
+    srv.listen(0, async () => {
+      const port = srv.address().port;
+      const get = (p) => new Promise((rs, rj) => { http.get({ host: '127.0.0.1', port, path: p }, (s) => { let b = ''; s.on('data', c => b += c); s.on('end', () => rs({ status: s.statusCode, body: b, headers: s.headers })); }).on('error', rj); });
+      const post = (p, o, h) => new Promise((rs, rj) => { const d = JSON.stringify(o); const r = http.request({ host: '127.0.0.1', port, method: 'POST', path: p, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(d), ...(h || {}) } }, (s) => { let b = ''; s.on('data', c => b += c); s.on('end', () => rs({ status: s.statusCode, body: b })); }); r.on('error', rj); r.write(d); r.end(); });
+
+      const health = await get('/health');
+      const prev = await get('/signal/preview?q=base');
+      const paid402 = await get('/signal?q=base');
+      const scored = await post('/signal/preview', { candidates: [{ id: '1', text: 'ETH pumping', likes: 9000, retweets: 800 }], query: 'ETH' });
+      const mcpList = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+      const mcpCall = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_signal', arguments: { candidates: [{ id: '1', text: 'ETH pumping hard', likes: 9000, retweets: 800, replies: 200 }] } } });
+      const disc = await get('/.well-known/mcp.json');
+      const card = await get('/.well-known/agent-card.json');
+
+      const checks = [
+        ['GET /health → ok + paidRoute/priceUsd', health.status === 200 && JSON.parse(health.body).paidRoute === '/signal'],
+        ['GET /signal/preview → 200 free preview (capped, scores only)', prev.status === 200 && JSON.parse(prev.body).preview === true],
+        ['GET /signal → 402 (x402 accepts, USDC/base) until paid', paid402.status === 402 && JSON.parse(paid402.body).accepts[0].network === 'base' && JSON.parse(paid402.body).accepts[0].asset.startsWith('0x833589')],
+        ['POST /signal/preview with candidates → scores them (preview)', scored.status === 200 && JSON.parse(scored.body).topScore > 0],
+        ['MCP tools/list → get_signal', mcpList.status === 200 && JSON.parse(mcpList.body).result.tools[0].name === 'get_signal'],
+        ['MCP get_signal (candidates) → full scored signal', mcpCall.status === 200 && JSON.parse(JSON.parse(mcpCall.body).result.content[0].text).items[0].score > 0],
+        ['GET /.well-known/mcp.json → discovery (paid route + free preview)', disc.status === 200 && JSON.parse(disc.body).paid.route === '/signal'],
+        ['GET /.well-known/agent-card.json → ERC-8004 (x402 pricing, payTo)', card.status === 200 && JSON.parse(card.body).payment.protocol === 'x402'],
+        ['paid route NEVER serves without a verified payment (no facilitator → 402)', paid402.status === 402],
+      ];
+      console.log('xsignal server self-test:');
+      let pass = 0; for (const [n, ok] of checks) { console.log(ok ? 'PASS' : 'FAIL', '·', n); if (ok) pass++; }
+      console.log(`\n${pass}/${checks.length} checks passed`);
+      srv.close(); process.exit(pass === checks.length ? 0 : 1);
+    });
+  }
+}
