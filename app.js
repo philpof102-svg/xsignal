@@ -45,6 +45,20 @@ const PROBE_MAX = Number(process.env.XSIGNAL_PROBE_FREE || 3);
 const probeUsage = new Map();
 function grantProbe(wallet) { if (!isAddr(wallet)) return null; const w = String(wallet).toLowerCase(); const used = probeUsage.get(w) || 0; if (used >= PROBE_MAX) return null; probeUsage.set(w, used + 1); return { free: true, trial: used + 1, of: PROBE_MAX, remaining: PROBE_MAX - (used + 1), note: 'Free trial call ' + (used + 1) + '/' + PROBE_MAX + ' for this wallet. After that, pay via x402.' }; }
 
+// Live transparency for the abstaining flagship: rolling counters since restart (honest ACTIVITY, NOT a win-rate).
+// Set XSIGNAL_LOG_DIR to a mounted volume to also append an immutable verdict log — the seed for a calibrated
+// Brier/risk-coverage track record once realized outcomes are resolved (the one moat a bluffer cannot fake).
+const LOG_DIR = process.env.XSIGNAL_LOG_DIR || '';
+const stats = { since: Math.floor(Date.now() / 1000), total: 0, served: 0, abstained: 0, gaining: 0, fading: 0, conf: { lo: 0, mid: 0, hi: 0 } };
+function recordVerdict(payload, addr) {
+  stats.total++;
+  if (payload.served) { stats.served++; if (payload.verdict === 'gaining') stats.gaining++; else if (payload.verdict === 'fading') stats.fading++; }
+  else stats.abstained++;
+  const c = Number(payload.confidence) || 0;
+  stats.conf[c < 0.3 ? 'lo' : c < 0.6 ? 'mid' : 'hi']++;
+  if (LOG_DIR) { try { const sym = payload.evidence && payload.evidence.market && payload.evidence.market.symbol; fs.appendFileSync(LOG_DIR + '/verdicts.jsonl', JSON.stringify({ t: Math.floor(Date.now() / 1000), addr, symbol: sym || null, verdict: payload.verdict, confidence: payload.confidence, served: !!payload.served, outcome: null }) + '\n'); } catch (e) { /* best-effort logging */ } }
+}
+
 // small DEMO seed so /signal/preview always renders even with no API keys (clearly labelled demo)
 const SEED = [
   { id: 'demo1', text: 'BREAKING: major L2 airdrop just went live, gas spiking on Base', author: 'onchain_alpha', likes: 42000, retweets: 9100, replies: 2600, verified: true },
@@ -112,7 +126,15 @@ function createServer() {
       if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
       // the agent-installable skill (skill.md -> micro-paid plugin: how an agent uses the x402-paid tools)
       if (req.method === 'GET' && url === '/skill.md') { try { const md = fs.readFileSync(__dirname + '/SKILL.md', 'utf8'); res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', ...CORS }); return res.end(md); } catch (e) { return json(res, 404, { error: 'no skill' }); } }
-      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token', '/brief', '/intent'], noFreeTier: true, freeProbePerWallet: PROBE_MAX, prices: { '/signal': PRICE_USD, '/token': PRICE_USD, '/brief': BRIEF_PRICE_USD, '/intent': INTENT_PRICE_USD }, payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, cdpKeySet: !!(CDP_API_KEY_ID && CDP_API_KEY_SECRET) });
+      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token', '/brief', '/intent'], noFreeTier: true, freeProbePerWallet: PROBE_MAX, trackRecord: '/track-record', prices: { '/signal': PRICE_USD, '/token': PRICE_USD, '/brief': BRIEF_PRICE_USD, '/intent': INTENT_PRICE_USD }, payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, cdpKeySet: !!(CDP_API_KEY_ID && CDP_API_KEY_SECRET) });
+
+      if (req.method === 'GET' && url === '/track-record') return json(res, 200, {
+        note: 'Live transparency for the abstaining flagship (get_intent): descriptive activity since restart, NOT a win-rate. Calibration (Brier score + reliability diagram) requires realized forward outcomes — on the roadmap once verdicts accrue on a persistent volume.',
+        since: stats.since, total: stats.total, served: stats.served, abstained: stats.abstained,
+        abstentionRate: stats.total ? Math.round((stats.abstained / stats.total) * 100) / 100 : null,
+        coverage: stats.total ? Math.round((stats.served / stats.total) * 100) / 100 : null,
+        verdicts: { gaining: stats.gaining, fading: stats.fading }, confidence: stats.conf, durableLog: !!LOG_DIR,
+      });
 
       if (url === '/mcp') {
         if (req.method !== 'POST') return json(res, 405, { error: 'POST JSON-RPC to /mcp' }, { allow: 'POST' });
@@ -161,13 +183,14 @@ function createServer() {
         const a = req.method === 'POST' ? (await body(req) || {}) : { addr: qs.get('addr'), question: qs.get('question') || qs.get('q'), min_confidence: qs.get('min_confidence'), wallet: qs.get('wallet') };
         const minConfidence = a.min_confidence != null ? a.min_confidence : a.minConfidence;
         const probe = grantProbe(a.wallet || qs.get('wallet'));
-        if (probe) { const { intel, signal, query } = await getBrief(a.addr, a.question); const payload = buildIntent({ intel, signal, question: a.question || query || null, minConfidence, price: INTENT_PRICE_USD }); const receipt = makeReceipt({ addr: a.addr, question: payload.question, minConfidence: payload.minConfidence }, payload, null); return json(res, 200, { ...payload, receipt, probe }); }
+        if (probe) { const { intel, signal, query } = await getBrief(a.addr, a.question); const payload = buildIntent({ intel, signal, question: a.question || query || null, minConfidence, price: INTENT_PRICE_USD }); const receipt = makeReceipt({ addr: a.addr, question: payload.question, minConfidence: payload.minConfidence }, payload, null); recordVerdict(payload, a.addr); return json(res, 200, { ...payload, receipt, probe }); }
         const reqs = paymentRequired({ priceUsd: INTENT_PRICE_USD, payTo: PAY_TO, resource: '/intent', description: 'xsignal - outcome-priced momentum verdict (may abstain)', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         const { intel, signal, query } = await getBrief(a.addr, a.question);
         const inp = { intel, signal, question: a.question || query || null, minConfidence, price: INTENT_PRICE_USD };
         const payload = buildIntent(inp);
+        recordVerdict(payload, a.addr);
         const receipt = makeReceipt({ addr: a.addr, question: inp.question, minConfidence: payload.minConfidence }, payload, v.txHash);
         return json(res, 200, { ...payload, receipt, paid: true });
       }
@@ -205,6 +228,7 @@ No free tier, but <b>3 free calls per wallet</b> to try, then from $${PRICE_USD}
 <div class="t"><b>Signal (${PRICE_USD} USDC)</b><br/><code>GET /signal?q=base+memecoin</code> - scored + cited real-time X/social signal (text, metrics, all items).</div>
 <div class="t"><b>Token intel (${PRICE_USD} USDC)</b><br/><code>GET /token?addr=0x…</code> - liquidity, volume, price, pool age, buy/sell flow + market flags (data, not a trust rating).</div>
 <div class="t"><b>Try free</b> - add <code>?wallet=0xYourAddr</code> to any call for 3 free full results, then pay via x402. <b>Agents:</b> MCP at <code>/mcp</code>, discovery at <code>/.well-known/mcp.json</code> + <code>/.well-known/agent-card.json</code>.</div>
+<div class="t"><b>Transparency</b> - live abstention rate + coverage at <code>/track-record</code> (how often it stays quiet; honest activity, not a win-rate).</div>
 <p style="color:#8a97b5;font-size:13px">Signals are scored from public X posts + public DEX data - verify before acting; not financial advice. Confidence is a mechanical heuristic, not a prediction.</p></body></html>`;
 }
 
@@ -232,6 +256,8 @@ if (require.main === module) {
       const disc = await get('/.well-known/mcp.json');
       const card = await get('/.well-known/agent-card.json');
       const probeCall = await get('/signal?q=base&wallet=0x' + 'cd'.repeat(20));
+      const probeIntent = await get('/intent?addr=0xbad&min_confidence=0.9&wallet=0x' + 'ab'.repeat(20));
+      const trackRec = await get('/track-record');
 
       const checks = [
         ['GET /health → ok + paidRoutes + noFreeTier flag', health.status === 200 && JSON.parse(health.body).paidRoutes.includes('/signal') && JSON.parse(health.body).noFreeTier === true],
@@ -242,6 +268,7 @@ if (require.main === module) {
         ['removed free-preview route → 404 (no free data tier)', previewGone.status === 404],
         ['MCP tools/list → 4 tools, flagship get_intent first', mcpList.status === 200 && JSON.parse(mcpList.body).result.tools.length === 4 && JSON.parse(mcpList.body).result.tools[0].name === 'get_intent' && JSON.parse(mcpList.body).result.tools.some(t => t.name === 'get_signal')],
         ['GET /signal?wallet=0x… → 200 FREE probe call (3 free per wallet)', probeCall.status === 200 && JSON.parse(probeCall.body).probe && JSON.parse(probeCall.body).probe.free === true],
+        ['GET /track-record → 200 live abstention transparency (reflects the intent call)', trackRec.status === 200 && JSON.parse(trackRec.body).total >= 1 && JSON.parse(trackRec.body).abstentionRate !== null],
         ['MCP get_signal → x402 PAYMENT POINTER (paymentRequired + accepts, NOT free data)', mcpSignal.status === 200 && JSON.parse(JSON.parse(mcpSignal.body).result.content[0].text).paymentRequired === true],
         ['MCP get_intent → x402 payment pointer (no free quote)', mcpIntent.status === 200 && JSON.parse(JSON.parse(mcpIntent.body).result.content[0].text).paymentRequired === true],
         ['GET /.well-known/mcp.json → 4 paid routes + 4 tools + noFreeTier', disc.status === 200 && JSON.parse(disc.body).paid.routes.length === 4 && JSON.parse(disc.body).tools.length === 4 && JSON.parse(disc.body).paid.noFreeTier === true],
