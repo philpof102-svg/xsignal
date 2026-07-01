@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "slug": "xsignal",
+  "provider": "xsignal",
+  "providerUrl": "https://xsignal-production.up.railway.app",
+  "demo": {
+    "title": "intent.sh",
+    "language": "bash",
+    "code": "curl \"https://xsignal-production.up.railway.app/intent?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed&min_confidence=0.7&wallet=0xYourAddr\""
+  },
+  "setup": [
+    "No account or API key. Add ?wallet=0xYourAddr to any call for 3 free results per wallet.",
+    "Beyond 3, pay per call in USDC on Base via x402 (x402-fetch / x402-axios + a funded Base wallet)."
+  ],
+  "install": {
+    "type": "external",
+    "command": "Use xsignal get_intent - an x402-paid Base-token momentum verdict (gaining/fading) that ABSTAINS when it isn't confident, instead of always guessing. MCP: https://xsignal-production.up.railway.app/mcp"
+  }
+}
