@@ -1,37 +1,53 @@
 # ⚡ xsignal
 
-An **x402-paid real-time X/social signal** for AI agents — a sellable *ingredient* for the agentic economy on **Base**.
-Agents pay a few cents in USDC to get a **fresh, scored, cited** signal instead of stale training data or generic search.
+**Pay-per-call data ingredients for AI agents on Base**, via x402 (USDC). The flagship is the one thing no other x402
+signal does: **`get_intent` abstains** — it returns *"no verdict"* (and says so) when it isn't confident enough, instead
+of always answering and always charging. **3 free calls per wallet** to try, then from **$0.01**. Verify-only: never
+signs or moves funds.
 
-## Why
-The x402 rail + discovery catalog are commoditized (Coinbase/Circle/AWS/Stripe). The defensible thing is a **useful
-ingredient with a moat** — here, real-time social signal scored for *freshness + virality* and **cited** to source posts,
-serving the crypto-native agents/traders who are the actual x402 buyers today.
+## The tools (flagship first)
+| Tool / route | Price | What you get |
+|---|---|---|
+| **`get_intent`** · `GET /intent?addr=0x…&min_confidence=0.7` | $0.01 | An outcome-priced momentum verdict (`gaining`/`fading`) **only if** confidence clears your bar, else a calibrated `abstain`. Paid answers carry a keyless tamper-evidence receipt. |
+| `get_token_brief` · `GET /brief?addr=0x…` | $0.05 | A **meal**: fuses market intel + cited social signal into a "what is happening with $TOKEN now" brief. |
+| `get_signal` · `GET /signal?q=<topic>` | $0.01 | A scored (virality + freshness) and **cited** real-time X/social signal. |
+| `get_token_intel` · `GET /token?addr=0x…` | $0.01 | Base token market data (liquidity/volume/price/age/flow + flags). Best as an input to the brief. |
+| `POST /mcp` | — | MCP (streamable-http): `tools/list` discovers the 4 tools; a `tools/call` returns an x402 **payment pointer**. |
+| `GET /health` · `/.well-known/mcp.json` · `/.well-known/agent-card.json` · `/skill.md` | free | health + agent discovery + the installable skill (no data). |
 
-## Endpoints
-| | |
-|---|---|
-| `GET /signal/preview?q=<topic>` | **FREE** capped preview (top 3, scores only) |
-| `GET /signal?q=<topic>` | **x402-paid** full signal — HTTP 402 + `accepts` until paid, then full text + metrics + citations |
-| `POST /signal` | paid; body `{candidates?[] \| query, terms?, source?, limit?}` |
-| `POST /mcp` | MCP `get_signal` tool (streamable-http) |
-| `GET /health` · `/.well-known/mcp.json` · `/.well-known/agent-card.json` | health + agent discovery |
+## Try it free (3 calls per wallet)
+Add `?wallet=0xYourAddress` to any route for **3 free full results**, so you can evaluate quality before paying. After 3,
+that wallet pays via x402.
+```bash
+curl "https://xsignal-production.up.railway.app/intent?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed&min_confidence=0.5&wallet=0xYourAddr"
+```
+Then run the example — a **watchlist alerter** that surfaces only the tokens confidently moving (and stays quiet on the rest):
+```bash
+WALLET=0xYourAddr node examples/watchlist-alerter.js
+```
+
+## Pay with x402 (beyond the free probe)
+The first post-probe request returns **HTTP 402** with an `accepts` array (price in USDC, network `base`, `payTo`). Pay
+with `x402-fetch`/`x402-axios` and a funded Base wallet, resubmit with the `X-PAYMENT` header, get the result. `/intent`
+is pay-first: you pay, then get a verdict **or** an honest abstain.
 
 ## Safety
 **We never sign or move funds.** x402 means we *receive* USDC to `payTo`; payment is **verify-only** via a facilitator.
-The signal is scored from public X posts — *verify before acting; not financial advice.*
+Signals are scored from public X posts + public DEX data — *verify before acting; not financial advice.* Confidence is a
+mechanical heuristic, not a calibrated probability or a prediction.
 
 ## Config (env)
 | Var | Purpose |
 |---|---|
 | `XSIGNAL_PAYTO` | address that receives USDC (public; no key). Default = the operator address. |
-| `XSIGNAL_PRICE_USD` | price per full signal (default `0.01`) |
-| `FACILITATOR_URL` / `FACILITATOR_KEY` | x402 facilitator (Coinbase CDP) — until set, the paid route correctly stays `402` |
-| `X_BEARER_TOKEN` **or** `XAI_API_KEY` | live candidate source (X search / Grok). No key → a small labelled DEMO seed so the preview always renders. |
+| `XSIGNAL_PRICE_USD` / `XSIGNAL_BRIEF_PRICE_USD` / `XSIGNAL_INTENT_PRICE_USD` | per-call prices (default `0.01` / `0.05` / `0.01`) |
+| `XSIGNAL_PROBE_FREE` | free probe calls per wallet (default `3`) |
+| `X402_NETWORK` / `FACILITATOR_URL` | `base` (mainnet CDP, needs `CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`) or `base-sepolia` (keyless x402.org) |
+| `X_BEARER_TOKEN` **or** `XAI_API_KEY` | live X/Grok source for `get_signal` (token intel + intent are keyless via DexScreener). No key → a labelled DEMO seed. |
 
 ## Run
 ```bash
 npm start      # :4520
-npm test       # 30/30 self-tests
+npm test       # full self-test suite (signal · tokenintel · brief · intent · x402 · sources · server)
 ```
-Zero runtime dependencies — plain Node (>=18). Adapted from XMoment's `x-agent` scoring.
+Zero **runtime** deps for the core (plain Node >=18); `@coinbase/x402` is used only for CDP-facilitator auth on mainnet.
