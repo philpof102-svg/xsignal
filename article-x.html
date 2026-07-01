@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>I built a crypto signal that shuts up when it isn't sure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+:root{ --bg:#0b0f0d; --panel:#0f1512; --ink:#dfeee6; --dim:#7f9a8c; --line:#1c2a23; --sig:#39d98a; --amber:#e8b64a; --red:#e5654a; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Newsreader',Georgia,serif;font-size:18px;line-height:1.7;
+  background-image:radial-gradient(circle at 85% -5%,rgba(57,217,138,.08),transparent 42%);}
+.wrap{max-width:700px;margin:0 auto;padding:52px 22px 90px}
+.kick{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--sig);margin:0 0 16px}
+h1{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(32px,6.5vw,52px);line-height:1.05;letter-spacing:-.01em;margin:0 0 20px;color:#fff}
+.lede{font-size:21px;color:#c8ddd2;font-style:italic;margin:0 0 28px}
+.meta{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:12px 0;margin:0 0 36px;display:flex;gap:18px;flex-wrap:wrap}
+h2{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--sig);margin:46px 0 14px}
+p{margin:0 0 18px}
+a{color:var(--sig)}
+strong{color:#fff;font-weight:600}
+.verdict{font-family:'JetBrains Mono',monospace;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:20px 0;font-size:14px;line-height:1.6}
+.verdict .g{color:var(--sig)}.verdict .a{color:var(--amber)}.verdict .r{color:var(--red)}.verdict .d{color:var(--dim)}
+code,pre{font-family:'JetBrains Mono',monospace}
+code{background:#132019;color:var(--sig);padding:2px 7px;border-radius:6px;font-size:13.5px}
+pre{background:#070b09;border:1px solid var(--line);border-left:3px solid var(--sig);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:13px;color:#c8ddd2;line-height:1.55}
+ul{padding-left:22px;margin:0 0 18px}li{margin:7px 0}
+.honest{border:1px dashed #2f4a3c;border-radius:12px;padding:18px 22px;margin:32px 0;background:rgba(232,182,74,.05)}
+.honest h2{margin-top:0;color:var(--amber)}
+.cta{text-align:center;margin:48px 0 0}
+.cta a{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:14px;border:1px solid var(--sig);color:var(--sig);padding:12px 22px;border-radius:10px;text-decoration:none}
+.foot{margin-top:42px;font-size:13px;color:var(--dim);font-family:'JetBrains Mono',monospace;border-top:1px solid var(--line);padding-top:18px;line-height:1.6}
+.pull{font-family:'Newsreader',serif;font-style:italic;font-size:24px;color:#fff;border-left:3px solid var(--sig);padding:6px 0 6px 20px;margin:28px 0}
+</style>
+</head>
+<body>
+<article class="wrap">
+  <p class="kick">x402 // Base // agent tooling</p>
+  <h1>I built a crypto signal that shuts up when it isn't sure</h1>
+  <p class="lede">Every signal service on the internet always gives you an answer, and always charges you for it. That is backwards. The one honest move a signal can make is to abstain, and almost nobody sells it.</p>
+  <div class="meta"><span>~5 min read</span><span>open-source</span><span>x402 / USDC on Base</span></div>
+
+  <p>Here is a thing that took me too long to notice. Score a model's "I don't know" as zero, and bluffing becomes the optimal strategy. You always maximize your score by guessing. Signal services inherit exactly this incentive: they emit a confident call on every request because a call is a billable event and silence is not.</p>
+  <p>So the whole category looks the same. A confidence number attached to an answer that is always given, always paid for. The abstention, the single most valuable output when the data is thin, is the one thing missing.</p>
+
+  <p class="pull">A signal that refuses to answer when it can't clear your bar should not score worse than one that invents a confident guess.</p>
+
+  <h2>What it does</h2>
+  <p>The flagship tool is <code>get_intent</code>. You give it a Base token and your minimum confidence. It returns a mechanical momentum read, gaining or fading, <strong>only if the signal agreement clears your bar</strong>. Otherwise it abstains, and says so.</p>
+  <div class="verdict">
+    &gt; get_intent(0x4ed4…, min_confidence=0.7)<br/>
+    <span class="g">gaining</span> <span class="d">// confidence 0.78, cited evidence + a keyless receipt</span><br/><br/>
+    &gt; get_intent(0x9a2b…, min_confidence=0.7)<br/>
+    <span class="a">abstain</span> <span class="d">// confidence 0.31 &lt; your bar. no verdict forced.</span>
+  </div>
+  <p>The price is flat, so it is never scaled up by confidence (that would just reward inflating it). Confidence is a transparent agreement heuristic, not a prediction, and weak or conflicting signals return <em>unknown</em> rather than a manufactured call.</p>
+
+  <h2>How to call it</h2>
+  <p>It is built for agents. Three free calls per wallet to evaluate it, then micro-paid per call in USDC on Base via x402. No account, no key.</p>
+  <pre># 3 free calls per wallet, then x402 pays automatically
+curl "https://xsignal-production.up.railway.app/intent?addr=0x4ed4…&min_confidence=0.7&wallet=0xYou"
+
+# or install it as an MCP tool in Claude / Cursor
+npx @rakshasar/xsignal xsignal-mcp</pre>
+  <p>There are three more tools underneath (a cited X/social signal, Base token market intel, and a fused brief), but the abstaining verdict is the one worth leading with.</p>
+
+  <h2>Why abstention is the edge</h2>
+  <p>Selective prediction is a mature idea in machine learning: refuse the calls you can't stand behind, and accuracy on the ones you keep goes up. The honest proof is a coverage-versus-accuracy curve, and it is the one thing a bluffing competitor structurally cannot fake without eating a worse score. Everyone can emit a confidence number. Almost nobody will forgo the billable answer.</p>
+
+  <div class="honest">
+    <h2>The honest part</h2>
+    <p>Real talk on the market: paid agent-signal demand today is thin and a large share of on-chain "agent payment" volume is wash. This is not a get-rich tool and it makes no trading promises. It is verify-only, it never signs or moves your funds, and it holds no keys. Every output is an input to your decision, not the decision. Verify before acting, and none of this is financial advice.</p>
+  </div>
+
+  <h2>Try it</h2>
+  <p>Point an agent at it, use your three free calls, and see whether an abstaining verdict is more useful to you than another feed that always answers.</p>
+
+  <div class="cta"><a href="https://xsignal-production.up.railway.app">→ xsignal-production.up.railway.app</a></div>
+
+  <p class="foot">open-source · npm @rakshasar/xsignal · MCP + agent-card · verify-only, never signs. Not financial advice. Tools and market conditions change, verify current details yourself.</p>
+</article>
+</body>
+</html>
