@@ -2,7 +2,7 @@
 /**
  * xsignal SDK — a tiny client for the hosted x402 data ingredients on Base.
  *
- *   const xsignal = require('@raskhaaa/xsignal');
+ *   const xsignal = require('@rakshasar/xsignal');
  *   const x = xsignal.client({ wallet: '0xYourAddr' });   // wallet → 3 free calls, then x402
  *   const verdict = await x.intent('0x4ed4…', { minConfidence: 0.7 });
  *

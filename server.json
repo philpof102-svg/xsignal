@@ -12,7 +12,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@raskhaaa/xsignal",
+      "identifier": "@rakshasar/xsignal",
       "version": "0.2.0",
       "transport": {
         "type": "stdio"
@@ -21,7 +21,7 @@
       "runtimeArguments": [
         {
           "type": "positional",
-          "value": "@raskhaaa/xsignal",
+          "value": "@rakshasar/xsignal",
           "valueHint": "package-name"
         },
         {

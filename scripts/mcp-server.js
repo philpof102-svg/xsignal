@@ -11,7 +11,7 @@
  *     "mcpServers": {
  *       "xsignal": {
  *         "command": "npx",
- *         "args": ["-y", "@raskhaaa/xsignal", "xsignal-mcp"],
+ *         "args": ["-y", "@rakshasar/xsignal", "xsignal-mcp"],
  *         "env": { "XSIGNAL_WALLET": "0xYourAddress" }
  *       }
  *     }

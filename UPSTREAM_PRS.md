@@ -1,13 +1,13 @@
 # Upstream PR drafts — distribution (copied from MainStreet's proven playbook)
 
 Ready-to-paste content to get xsignal listed in third-party framework docs + ecosystem lists. Each is a self-contained
-PR. The npm package `@raskhaaa/xsignal` (+ `/tools` adapters) is the enabler — publish it first (see below), then these PRs
+PR. The npm package `@rakshasar/xsignal` (+ `/tools` adapters) is the enabler — publish it first (see below), then these PRs
 land one-line integrations in each framework. Submission = Phil (PRs to third-party public repos).
 
 ## 0. Publish the package (unlocks everything else)
 - `npm publish --access public` (needs Phil's npm login / `NPM_TOKEN`), OR push a `v0.2.0` tag → `.github/workflows/publish.yml`
   runs tests → npm publish → `mcp-publisher login github-oidc` → publish (updates the MCP Registry entry with the npm package,
-  so xsignal lists as an INSTALLABLE `npx @raskhaaa/xsignal xsignal-mcp`, not just a remote).
+  so xsignal lists as an INSTALLABLE `npx @rakshasar/xsignal xsignal-mcp`, not just a remote).
 - Then the installable-MCP surfaces auto/near-auto index it: Smithery (`smithery mcp publish …/mcp`), mcp.so (web form),
   Glama / PulseMCP (auto-ingest from the MCP Registry).
 
@@ -16,7 +16,7 @@ land one-line integrations in each framework. Submission = Phil (PRs to third-pa
 ```ts
 // libs/langchain-community/src/tools/xsignal.ts
 import { DynamicStructuredTool } from '@langchain/core/tools';
-import { langchain } from '@raskhaaa/xsignal/tools';
+import { langchain } from '@rakshasar/xsignal/tools';
 export function getXsignalTools(opts?: { wallet?: string }) {
   return langchain(opts).map(s => new DynamicStructuredTool({
     name: s.name, description: s.description, schema: s.schema,
@@ -29,7 +29,7 @@ export function getXsignalTools(opts?: { wallet?: string }) {
 ```ts
 // packages/llamaindex/src/tools/xsignal.ts
 import { FunctionTool } from 'llamaindex';
-import { specs, execute } from '@raskhaaa/xsignal/tools';
+import { specs, execute } from '@rakshasar/xsignal/tools';
 export function getXsignalTools(opts?: { wallet?: string }) {
   return specs().map(s => FunctionTool.from(
     async (a) => JSON.stringify(await execute(s.name, a, opts)),
@@ -43,7 +43,7 @@ PR adds `examples/xsignal-token-scout/` showing an agent that reads a Base token
 ```ts
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { vercelAiSdk } from '@raskhaaa/xsignal/tools';
+import { vercelAiSdk } from '@rakshasar/xsignal/tools';
 const { text } = await generateText({
   model: openai('gpt-4o-mini'),
   tools: vercelAiSdk({ wallet: process.env.XSIGNAL_WALLET }),
@@ -54,7 +54,7 @@ const { text } = await generateText({
 ## 4. awesome-x402 lists
 **Repos:** `xpaysh/awesome-x402` + `Merit-Systems/awesome-x402` → "Production Implementations / live endpoints".
 > **xsignal** — pay-per-call data ingredients for Base agents. Flagship `get_intent`: the only x402 signal that ABSTAINS
-> below your confidence bar instead of guessing. MCP + npm (`@raskhaaa/xsignal`), 3 free calls per wallet, from $0.01 USDC.
+> below your confidence bar instead of guessing. MCP + npm (`@rakshasar/xsignal`), 3 free calls per wallet, from $0.01 USDC.
 > https://xsignal-production.up.railway.app · https://github.com/philpof102-svg/xsignal
 
 ## 5. Bankr Skills

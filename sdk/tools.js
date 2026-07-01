@@ -3,7 +3,7 @@
  * xsignal SDK — LLM tool definitions. One import, plug into any framework:
  *   OpenAI / Anthropic / Vercel AI SDK / LangChain / Mastra.
  *
- *   import { vercelAiSdk } from '@raskhaaa/xsignal/tools';
+ *   import { vercelAiSdk } from '@rakshasar/xsignal/tools';
  *   const result = await generateText({ model, tools: vercelAiSdk({ wallet: '0xYourAddr' }) });
  *
  * Each tool's execute() calls the hosted xsignal endpoint (3 free calls per wallet, then an x402 pay pointer)
