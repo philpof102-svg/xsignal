@@ -14,13 +14,14 @@
 const http = require('http');
 const { buildSignal, previewSignal } = require('./signal');
 const { buildTokenIntel, previewTokenIntel } = require('./tokenintel');
-const { paymentRequired, verifyPayment } = require('./x402');
+const { paymentRequired, verifyPayment, net } = require('./x402');
 const { fetchCandidates, fetchDexScreener } = require('./sources');
 
 const PAY_TO = process.env.XSIGNAL_PAYTO || '0xAC3ca7c5d3cDD7702fd08F9C4C28dAA22296aDa9'; // receives USDC; public addr, no key
 const PRICE_USD = Number(process.env.XSIGNAL_PRICE_USD || 0.01);
-const FACILITATOR_URL = process.env.FACILITATOR_URL || ''; // e.g. Coinbase CDP facilitator; empty → paid route stays 402
-const FACILITATOR_KEY = process.env.FACILITATOR_KEY || '';
+const X402_NETWORK = process.env.X402_NETWORK || 'base'; // base (mainnet, CDP facilitator needs a key) | base-sepolia (testnet, keyless x402.org)
+const FACILITATOR_URL = process.env.FACILITATOR_URL || net(X402_NETWORK).facilitator; // default facilitator per network
+const FACILITATOR_KEY = process.env.FACILITATOR_KEY || ''; // required for the mainnet CDP facilitator (never hard-coded)
 const SERVER = { name: 'xsignal', version: '0.1.0' };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type, authorization, x-payment, mcp-protocol-version' };
 const json = (res, code, obj, extra) => { res.writeHead(code, { 'content-type': 'application/json', ...CORS, ...(extra || {}) }); res.end(JSON.stringify(obj)); };
@@ -81,7 +82,7 @@ function createServer() {
     const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
     try {
       if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
-      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoute: '/signal', freeRoute: '/signal/preview', payTo: PAY_TO, priceUsd: PRICE_USD, facilitatorConfigured: !!FACILITATOR_URL });
+      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token'], freeRoutes: ['/signal/preview', '/token/preview'], payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, facilitatorKeySet: !!FACILITATOR_KEY });
 
       if (url === '/mcp') {
         if (req.method !== 'POST') return json(res, 405, { error: 'POST JSON-RPC to /mcp' }, { allow: 'POST' });
@@ -100,7 +101,7 @@ function createServer() {
       // x402-PAID full signal
       if (url === '/signal') {
         const a = req.method === 'POST' ? (await body(req) || {}) : { query: qs.get('q'), source: qs.get('source'), limit: qs.get('limit') };
-        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/signal' });
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/signal', network: X402_NETWORK });
         const payHeader = req.headers['x-payment'];
         const v = await verifyPayment(payHeader, { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason }); // pay, then resubmit with X-PAYMENT
@@ -116,7 +117,7 @@ function createServer() {
       // x402-PAID full token intel
       if (url === '/token') {
         const addr = req.method === 'POST' ? ((await body(req) || {}).addr) : qs.get('addr');
-        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal — Base token market intel' });
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal — Base token market intel', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         return json(res, 200, { ...buildTokenIntel(await getToken(addr)), paid: true });
@@ -179,7 +180,7 @@ if (require.main === module) {
       const card = await get('/.well-known/agent-card.json');
 
       const checks = [
-        ['GET /health → ok + paidRoute/priceUsd', health.status === 200 && JSON.parse(health.body).paidRoute === '/signal'],
+        ['GET /health → ok + paidRoutes + network', health.status === 200 && JSON.parse(health.body).paidRoutes.includes('/signal') && !!JSON.parse(health.body).network],
         ['GET /signal/preview → 200 free preview (capped, scores only)', prev.status === 200 && JSON.parse(prev.body).preview === true],
         ['GET /signal → 402 (x402 accepts, USDC/base) until paid', paid402.status === 402 && JSON.parse(paid402.body).accepts[0].network === 'base' && JSON.parse(paid402.body).accepts[0].asset.startsWith('0x833589')],
         ['POST /signal/preview with candidates → scores them (preview)', scored.status === 200 && JSON.parse(scored.body).topScore > 0],
