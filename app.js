@@ -13,8 +13,9 @@
  */
 const http = require('http');
 const { buildSignal, previewSignal } = require('./signal');
+const { buildTokenIntel, previewTokenIntel } = require('./tokenintel');
 const { paymentRequired, verifyPayment } = require('./x402');
-const { fetchCandidates } = require('./sources');
+const { fetchCandidates, fetchDexScreener } = require('./sources');
 
 const PAY_TO = process.env.XSIGNAL_PAYTO || '0xAC3ca7c5d3cDD7702fd08F9C4C28dAA22296aDa9'; // receives USDC; public addr, no key
 const PRICE_USD = Number(process.env.XSIGNAL_PRICE_USD || 0.01);
@@ -43,7 +44,12 @@ async function getCandidates(a) {
 }
 const opForA = (a) => ({ query: a.query || null, terms: Array.isArray(a.terms) ? a.terms : (a.query ? String(a.query).split(/\s+/) : []), limit: Math.min(Number(a.limit) || 10, 25), minScore: a.minScore });
 
-const TOOLS = [{ name: 'get_signal', description: 'Real-time X/social signal for a topic: scored (virality+freshness) + CITED (source urls), deduped, ranked. Input: query (string) OR candidates[] (bring your own posts), terms?, source?(xsearch|grok), limit?. The live full signal is x402-paid at GET/POST /signal; this tool returns a preview unless candidates are supplied.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, candidates: { type: 'array' }, terms: { type: 'array' }, source: { type: 'string' }, limit: { type: 'integer' } } } }];
+async function getToken(addr) { try { return await fetchDexScreener(addr, {}); } catch (e) { return { addr, found: false, error: e && e.message }; } }
+
+const TOOLS = [
+  { name: 'get_signal', description: 'Real-time X/social signal for a topic: scored (virality+freshness) + CITED (source urls), deduped, ranked. Input: query (string) OR candidates[] (bring your own posts), terms?, source?(xsearch|grok), limit?. The live full signal is x402-paid at GET/POST /signal; this tool returns a preview unless candidates are supplied.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, candidates: { type: 'array' }, terms: { type: 'array' }, source: { type: 'string' }, limit: { type: 'integer' } } } },
+  { name: 'get_token_intel', description: 'Base token MARKET intel (liquidity, 24h volume, price + change, pool age, buy/sell flow, mechanical flags) from public DEX pools. NOT a trust/safety rating. Input: addr (0x Base token). Full intel is x402-paid at GET/POST /token; this tool returns a preview.', inputSchema: { type: 'object', properties: { addr: { type: 'string' } } } },
+];
 
 async function dispatch(msg) {
   const { id, method, params } = msg || {};
@@ -53,11 +59,18 @@ async function dispatch(msg) {
   if (method === 'tools/list') return ok({ tools: TOOLS });
   if (method === 'ping') return ok({});
   if (method === 'tools/call') {
+    const name = params && params.name;
     const a = (params && params.arguments) || {};
-    if ((params && params.name) !== 'get_signal') return { jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown tool' } };
-    const { candidates } = await getCandidates(a);
-    const payload = Array.isArray(a.candidates) && a.candidates.length ? buildSignal(candidates, opForA(a)) : previewSignal(candidates, opForA(a));
-    return ok({ content: [{ type: 'text', text: JSON.stringify(payload) }], isError: false });
+    if (name === 'get_signal') {
+      const { candidates } = await getCandidates(a);
+      const payload = Array.isArray(a.candidates) && a.candidates.length ? buildSignal(candidates, opForA(a)) : previewSignal(candidates, opForA(a));
+      return ok({ content: [{ type: 'text', text: JSON.stringify(payload) }], isError: false });
+    }
+    if (name === 'get_token_intel') {
+      try { const payload = previewTokenIntel(await getToken(a.addr)); return ok({ content: [{ type: 'text', text: JSON.stringify(payload) }], isError: false }); }
+      catch (e) { return ok({ content: [{ type: 'text', text: 'error: ' + (e && e.message) }], isError: true }); }
+    }
+    return { jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown tool' } };
   }
   return { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found' } };
 }
@@ -95,7 +108,21 @@ function createServer() {
         return json(res, 200, { ...buildSignal(candidates, opForA(a)), live, source_note: note, paid: true });
       }
 
-      if (req.method === 'GET' && url === '/.well-known/mcp.json') return json(res, 200, { name: SERVER.name, version: SERVER.version, protocolVersion: '2024-11-05', description: 'xsignal — x402-paid real-time X/social signal (scored + cited) for agents.', mcp: { endpoint: baseUrl(req) + '/mcp', transport: 'streamable-http' }, tools: TOOLS.map((t) => ({ name: t.name, description: t.description })), paid: { route: '/signal', priceUsd: PRICE_USD, asset: 'USDC', network: 'base', freePreview: '/signal/preview' } });
+      // FREE token intel preview (open) — headline stats + flags. Data source (DexScreener) is free → works with no keys.
+      if (url === '/token/preview') {
+        const addr = req.method === 'POST' ? ((await body(req) || {}).addr) : qs.get('addr');
+        return json(res, 200, previewTokenIntel(await getToken(addr)));
+      }
+      // x402-PAID full token intel
+      if (url === '/token') {
+        const addr = req.method === 'POST' ? ((await body(req) || {}).addr) : qs.get('addr');
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal — Base token market intel' });
+        const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
+        if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
+        return json(res, 200, { ...buildTokenIntel(await getToken(addr)), paid: true });
+      }
+
+      if (req.method === 'GET' && url === '/.well-known/mcp.json') return json(res, 200, { name: SERVER.name, version: SERVER.version, protocolVersion: '2024-11-05', description: 'xsignal — x402-paid real-time X/social signal (scored + cited) for agents.', mcp: { endpoint: baseUrl(req) + '/mcp', transport: 'streamable-http' }, tools: TOOLS.map((t) => ({ name: t.name, description: t.description })), paid: { routes: ['/signal', '/token'], priceUsd: PRICE_USD, asset: 'USDC', network: 'base', freePreview: ['/signal/preview', '/token/preview'] } });
       if (req.method === 'GET' && url === '/.well-known/agent-card.json') return json(res, 200, agentCard(baseUrl(req)));
 
       if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...CORS }); return res.end(landing()); }
@@ -108,7 +135,10 @@ const baseUrl = (req) => (req.headers['x-forwarded-proto'] || 'https') + '://' +
 function agentCard(base) {
   return { $schema: 'https://eips.ethereum.org/EIPS/eip-8004#agent-card', name: 'xsignal', description: 'x402-paid real-time X/social signal (scored + cited) for agents. Pay per call in USDC on Base; free preview available.', url: base,
     mcp: { endpoint: base + '/mcp', transport: 'streamable-http' },
-    skills: [{ id: 'real-time-signal', primary: true, name: 'Real-time X/social signal', description: 'Fresh, scored (virality+freshness), cited social signal for a topic. Full signal x402-paid; free preview at /signal/preview.', endpoint: base + '/signal', method: 'GET', pricing: { scheme: 'x402-exact', amount: String(PRICE_USD), currency: 'USDC', network: 'eip155:8453' }, tags: ['x402', 'signal', 'x', 'social', 'realtime', 'base'] }],
+    skills: [
+      { id: 'real-time-signal', primary: true, name: 'Real-time X/social signal', description: 'Fresh, scored (virality+freshness), cited social signal for a topic. Full signal x402-paid; free preview at /signal/preview.', endpoint: base + '/signal', method: 'GET', pricing: { scheme: 'x402-exact', amount: String(PRICE_USD), currency: 'USDC', network: 'eip155:8453' }, tags: ['x402', 'signal', 'x', 'social', 'realtime', 'base'] },
+      { id: 'token-market-intel', name: 'Base token market intel', description: 'Liquidity/volume/price/age/buy-sell flow + mechanical flags for a Base token (market data, NOT a trust rating). Full intel x402-paid at /token; free preview at /token/preview.', endpoint: base + '/token', method: 'GET', pricing: { scheme: 'x402-exact', amount: String(PRICE_USD), currency: 'USDC', network: 'eip155:8453' }, tags: ['x402', 'token', 'base', 'defi', 'market-data'] },
+    ],
     payment: { protocol: 'x402', network: 'base', asset: 'USDC', payTo: PAY_TO }, safety: { descriptorOnly: true, signsFunds: false } };
 }
 function landing() {
@@ -121,6 +151,7 @@ instead of stale training data or generic search. Pay per call in <span class="p
 ingredient for the agentic economy.</p>
 <div class="t"><b>Free preview</b><br/><code>GET /signal/preview?q=base+memecoin</code> — top 3, scores only.</div>
 <div class="t"><b>Full signal (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /signal?q=base+memecoin</code> — 402 until paid; full text, metrics, all items + citations.</div>
+<div class="t"><b>Token intel (x402-paid)</b><br/><code>GET /token?addr=0x…</code> — liquidity, volume, price, pool age, buy/sell flow + market flags (data, not a trust rating). Free preview: <code>/token/preview?addr=0x…</code>.</div>
 <div class="t"><b>Agents</b> — MCP at <code>/mcp</code> (tool <code>get_signal</code>), discovery at <code>/.well-known/mcp.json</code> + <code>/.well-known/agent-card.json</code>.</div>
 <p style="color:#8a97b5;font-size:13px">Signal is scored from public X posts — verify before acting; not financial advice. We never hold keys or move funds.</p></body></html>`;
 }
@@ -143,6 +174,7 @@ if (require.main === module) {
       const scored = await post('/signal/preview', { candidates: [{ id: '1', text: 'ETH pumping', likes: 9000, retweets: 800 }], query: 'ETH' });
       const mcpList = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' });
       const mcpCall = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_signal', arguments: { candidates: [{ id: '1', text: 'ETH pumping hard', likes: 9000, retweets: 800, replies: 200 }] } } });
+      const tok402 = await get('/token?addr=0x' + 'ab'.repeat(20));
       const disc = await get('/.well-known/mcp.json');
       const card = await get('/.well-known/agent-card.json');
 
@@ -153,7 +185,8 @@ if (require.main === module) {
         ['POST /signal/preview with candidates → scores them (preview)', scored.status === 200 && JSON.parse(scored.body).topScore > 0],
         ['MCP tools/list → get_signal', mcpList.status === 200 && JSON.parse(mcpList.body).result.tools[0].name === 'get_signal'],
         ['MCP get_signal (candidates) → full scored signal', mcpCall.status === 200 && JSON.parse(JSON.parse(mcpCall.body).result.content[0].text).items[0].score > 0],
-        ['GET /.well-known/mcp.json → discovery (paid route + free preview)', disc.status === 200 && JSON.parse(disc.body).paid.route === '/signal'],
+        ['GET /token → x402-paid (402 until paid, payment-first, route wired)', tok402.status === 402],
+        ['GET /.well-known/mcp.json → discovery lists both paid ingredients (/signal + /token)', disc.status === 200 && JSON.parse(disc.body).paid.routes.includes('/token') && JSON.parse(disc.body).tools.length === 2],
         ['GET /.well-known/agent-card.json → ERC-8004 (x402 pricing, payTo)', card.status === 200 && JSON.parse(card.body).payment.protocol === 'x402'],
         ['paid route NEVER serves without a verified payment (no facilitator → 402)', paid402.status === 402],
       ];

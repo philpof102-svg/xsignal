@@ -48,7 +48,32 @@ async function fetchCandidates(query, opts = {}) {
   return fetchXSearch(query, opts);
 }
 
-module.exports = { fetchXSearch, fetchGrok, fetchCandidates };
+/** DexScreener (FREE, no key) → normalized Base token market data (top pair by liquidity). For tokenintel.js. */
+async function fetchDexScreener(addr, opts = {}) {
+  const fetchImpl = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+  if (!fetchImpl) throw new Error('no fetch available');
+  if (!/^0x[a-fA-F0-9]{40}$/.test(String(addr || ''))) throw new Error('valid 0x token address required');
+  const r = await fetchImpl('https://api.dexscreener.com/latest/dex/tokens/' + addr);
+  if (!r.ok) throw new Error('dexscreener HTTP ' + r.status);
+  const j = await r.json();
+  const pairs = ((j && j.pairs) || []).filter((p) => (p.chainId || '').toLowerCase() === 'base');
+  if (!pairs.length) return { addr, found: false };
+  const p = pairs.sort((a, b) => ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0))[0];
+  const tx = (p.txns && p.txns.h24) || {};
+  return {
+    addr, found: true,
+    symbol: p.baseToken && p.baseToken.symbol, name: p.baseToken && p.baseToken.name,
+    priceUsd: p.priceUsd != null ? Number(p.priceUsd) : null,
+    liquidityUsd: (p.liquidity && p.liquidity.usd) || 0,
+    volume24: (p.volume && p.volume.h24) || 0,
+    priceChange24: (p.priceChange && p.priceChange.h24) != null ? Number(p.priceChange.h24) : null,
+    pairCreatedAtMs: Number(p.pairCreatedAt) || NaN,
+    buys24: tx.buys || 0, sells24: tx.sells || 0,
+    dex: p.dexId || null, url: p.url || null,
+  };
+}
+
+module.exports = { fetchXSearch, fetchGrok, fetchCandidates, fetchDexScreener };
 
 // ---- SELF-TEST (the checker) ---------------------------------------------
 if (require.main === module) {
@@ -58,12 +83,17 @@ if (require.main === module) {
     const xs = await fetchXSearch('eth', { fetch: mockX, bearerToken: 't' });
     const gk = await fetchGrok('btc', { fetch: mockGrok, apiKey: 'k' });
     let noKey = false; try { await fetchXSearch('x', { fetch: mockX }); } catch (e) { noKey = true; }
+    const mockDex = async () => ({ ok: true, json: async () => ({ pairs: [{ chainId: 'base', baseToken: { symbol: 'DEGEN', name: 'Degen' }, priceUsd: '0.01', liquidity: { usd: 2500000 }, volume: { h24: 800000 }, priceChange: { h24: -3 }, pairCreatedAt: 1782000000000, txns: { h24: { buys: 1200, sells: 1000 } }, dexId: 'uniswap', url: 'https://dexscreener.com/base/0xdef' }, { chainId: 'ethereum', liquidity: { usd: 9999999 } }] }) });
+    const dx = await fetchDexScreener('0x' + 'de'.repeat(20), { fetch: mockDex });
+    let dxBad = false; try { await fetchDexScreener('notaddr', { fetch: mockDex }); } catch (e) { dxBad = true; }
 
     const checks = [
       ['fetchXSearch: parses X API v2 → item w/ metrics + createdAtSec + handle', xs.length === 1 && xs[0].author === 'trader' && xs[0].likes === 5000 && Number.isInteger(xs[0].createdAtSec)],
       ['fetchGrok: parses Grok JSON → item (real id)', gk.length === 1 && gk[0].id === '8' && gk[0].author === 'whale'],
       ['gated: no key → throws (never fabricates)', noKey === true],
-      ['NO signing/funds surface', !Object.keys(module.exports).some(k => typeof module.exports[k] === 'function' && /sign|send|pay|swap|deploy/i.test(k))],
+      ['fetchDexScreener: picks top Base pair, normalizes liq/vol/flow (ignores non-Base)', dx.found === true && dx.symbol === 'DEGEN' && dx.liquidityUsd === 2500000 && dx.buys24 === 1200],
+      ['fetchDexScreener: rejects a non-address input', dxBad === true],
+      ['NO fund-moving executor in the surface', !Object.keys(module.exports).some(k => typeof module.exports[k] === 'function' && /^(sign|send|swap|deploy|withdraw)/i.test(k))],
     ];
     let pass = 0; for (const [n, ok] of checks) { console.log(ok ? 'PASS' : 'FAIL', '·', n); if (ok) pass++; }
     console.log(`\n${pass}/${checks.length} checks passed`);
