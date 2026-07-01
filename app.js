@@ -12,6 +12,7 @@
  * XAI_API_KEY (no key → a small DEMO seed so the preview always renders). `node app.js --selftest` tests it.
  */
 const http = require('http');
+const fs = require('fs');
 const { buildSignal, previewSignal } = require('./signal');
 const { buildTokenIntel, previewTokenIntel } = require('./tokenintel');
 const { paymentRequired, verifyPayment, net } = require('./x402');
@@ -84,6 +85,8 @@ function createServer() {
     const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
     try {
       if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
+      // the agent-installable skill (skill.md -> micro-paid plugin: how an agent uses the x402-paid tools)
+      if (req.method === 'GET' && url === '/skill.md') { try { const md = fs.readFileSync(__dirname + '/SKILL.md', 'utf8'); res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', ...CORS }); return res.end(md); } catch (e) { return json(res, 404, { error: 'no skill' }); } }
       if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token'], freeRoutes: ['/signal/preview', '/token/preview'], payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, cdpKeySet: !!(CDP_API_KEY_ID && CDP_API_KEY_SECRET) });
 
       if (url === '/mcp') {
