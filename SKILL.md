@@ -1,59 +1,58 @@
 ---
 name: xsignal
-description: Pay-per-call data ingredients for agents on Base — a scored + CITED real-time X/social signal, Base token market intel, a fused token brief (meal), and an outcome-priced momentum verdict that ABSTAINS below your confidence bar. Every call is micro-paid via x402 (USDC on Base) from $0.01; there is no free tier. Use when you need current social virality on a topic, or to size up / read the momentum of a Base token before acting.
+description: Pay-per-call data ingredients for agents on Base. Flagship get_intent is the only x402 signal that ABSTAINS below your confidence bar (it refuses to answer, honestly, when it is not sure) instead of always returning a guess. Also: a fused token brief, a scored + CITED real-time X/social signal, and Base token market intel. 3 free calls per wallet to try, then micro-paid via x402 (USDC on Base) from $0.01.
 homepage: https://xsignal-production.up.railway.app
 license: MIT
 ---
 
-# xsignal — pay-per-call data ingredients for agents
+# xsignal — data ingredients that know when to shut up
 
-xsignal is a set of **paid ingredients for the agentic economy**: an agent calls one to get data it can't get from training
-data or generic search, priced per call in **USDC on Base via x402**. **No free tier** — every data call is x402-paid,
-from **$0.01**. It never signs or moves your funds; it returns data (or a calibrated abstain), you decide.
+xsignal sells **paid data ingredients for agents** on Base, priced per call in **USDC via x402**. What makes it different
+from every other x402 data feed: the flagship tool **abstains** — it returns "no verdict" (and says so) when the signal
+isn't strong enough, instead of always answering and always charging. **3 free calls per wallet** to try, then from
+**$0.01**. Verify-only: it never signs or moves your funds.
 
-## The tools
-- **get_signal** ($0.01) — what's *trending / viral / being said right now* about a topic (a token, a narrative, an
-  event). Ranked posts scored by virality + freshness, **with source URLs** (cite them; verify before acting).
-- **get_token_intel** ($0.01) — liquidity / 24h volume / price + change / pool age / buy-sell flow + mechanical flags
-  (thin-liquidity, very-new, sell-pressure, established) for a **Base token**. Market data, **not** a trust/safety rating.
-- **get_token_brief** ($0.05, a MEAL) — one call fuses `get_token_intel` + `get_signal` into a single "what is happening
-  with $TOKEN right now" brief: market flags + top **cited** posts + a plain-language, non-advisory summary.
-- **get_intent** ($0.01, outcome-priced) — pay-first, then a mechanical **momentum** verdict (gaining/fading) if
-  confidence meets your `min_confidence`, else a **calibrated ABSTAIN** (the flat fee is the no-fill fee). Paid answers
-  carry a keyless tamper-evidence receipt `{inputHash, outputHash, settlementTx}`.
+## The tools (flagship first)
+- **get_intent** ($0.01) — an **outcome-priced momentum verdict that ABSTAINS**. Post `{addr, min_confidence}` → get a
+  mechanical `gaining`/`fading` verdict **only if** the signal agreement clears your bar, else a calibrated `abstain`.
+  This is the one thing no other x402 signal does (the protocol norm is "always answer, always charge"). Paid answers
+  carry a keyless tamper-evidence receipt `{inputHash, outputHash, settlementTx}`. Confidence is a transparent heuristic,
+  **not** a prediction.
+- **get_token_brief** ($0.05, a MEAL) — one call fuses token market intel + real-time social signal into a
+  "what is happening with $TOKEN right now" brief: market flags + top **cited** posts + a plain-language summary.
+- **get_signal** ($0.01) — a scored (virality + freshness) and **cited** real-time X/social signal for any topic.
+- **get_token_intel** ($0.01) — Base token market data (liquidity, volume, price, pool age, buy/sell flow, flags) from
+  public DEX pools. Market data, **not** a trust rating. Best used as an input to the brief.
 
 ## How to call it
 
-### A) MCP (streamable-http) — for discovery
-Endpoint: `POST https://xsignal-production.up.railway.app/mcp` (JSON-RPC 2.0, protocol 2024-11-05, CORS-open).
-`tools/list` to discover the four tools. A `tools/call` returns an **x402 payment pointer** (price + `accepts` + the HTTP
-endpoint to pay) — MCP has no payment rail, so the data itself comes from the paid HTTP route below.
+### Try it free (3 calls per wallet)
+Add `?wallet=0xYourAddress` to any route to get 3 free FULL results, so you can evaluate quality before paying:
+`GET /intent?addr=0x…&min_confidence=0.7&wallet=0xYourAddr`. After 3, that wallet pays via x402.
 
-### B) HTTP (x402 pay-per-call) — where the data is served
-Every route is paid (no `/preview`):
-- `GET /signal?q=<topic>` ($0.01) · `GET /token?addr=<0x…>` ($0.01) · `GET /brief?addr=<0x…>` ($0.05)
-- `GET /intent?addr=<0x…>&min_confidence=<0-1>` ($0.01)
+### x402 (pay-per-call) — where the data is served
+Every route is paid after the free probe: `GET /intent?addr=0x…&min_confidence=0.7` ($0.01) ·
+`GET /brief?addr=0x…` ($0.05) · `GET /signal?q=<topic>` ($0.01) · `GET /token?addr=0x…` ($0.01).
+Flow: the first (post-probe) request returns **HTTP 402** with an `accepts` array (price in USDC, network `base`, `payTo`).
+Pay with `x402-axios`/`x402-fetch` and a funded Base wallet, resubmit with the `X-PAYMENT` header, receive the result.
+`/intent` is pay-first: you pay, then get a verdict **or** an honest abstain.
 
-Flow: the first request returns **HTTP 402** with an `accepts` array (price in USDC, network `base`, `payTo`). Pay per
-x402 (e.g. `x402-axios` / `x402-fetch` with your funded Base wallet) and resubmit with the `X-PAYMENT` header to receive
-the full result. `/intent` is pay-first: you pay, then get a verdict **or** an honest abstain if it can't meet your bar.
-
-Discovery (free, no data): `GET /health`, `GET /.well-known/mcp.json`, `GET /.well-known/agent-card.json` (ERC-8004),
-`GET /skill.md` (this file).
+### MCP (discovery)
+`POST /mcp` (JSON-RPC 2.0). `tools/list` discovers the four tools; a `tools/call` returns an **x402 payment pointer**
+(price + `accepts` + the HTTP endpoint) — MCP has no payment rail, so data is served from the paid HTTP route.
+Discovery (free, no data): `GET /health`, `/.well-known/mcp.json`, `/.well-known/agent-card.json`, `/skill.md`.
 
 ## Cost & safety
-- From **$0.01 USDC** per call on Base. No free tier — a funded agent pays in one hop; the $0.01 floor filters noise
-  without real friction.
-- Honest by design: signal is scored from **public X posts**; token intel + momentum are **public DEX-pool data**. All
-  are inputs, not decisions — *verify before acting; not financial advice.* `get_intent` confidence is a transparent
-  signal-agreement heuristic (**not** a calibrated probability or a prediction); weak/conflicting signals → abstain.
-- xsignal is verify-only and holds no keys/funds.
+- **3 free calls per wallet**, then from **$0.01 USDC** on Base. A funded agent pays in one hop.
+- Honest by design: signals are scored from **public X posts** + **public DEX data**; all are inputs, not decisions —
+  *verify before acting; not financial advice.* Confidence is a mechanical heuristic, not a calibrated probability.
+- Verify-only; holds no keys/funds.
 
 ## Example (buyer agent)
 ```js
-// pay for a token's momentum read; you either get a verdict or an honest abstain (both cost the flat $0.01)
+// 3 free probe calls first (?wallet=you), then x402fetch pays automatically once the probe is used up
 const res = await x402fetch(
-  'https://xsignal-production.up.railway.app/intent?addr=' + addr + '&min_confidence=0.7'
+  'https://xsignal-production.up.railway.app/intent?addr=' + addr + '&min_confidence=0.7&wallet=' + myWallet
 ).then(r => r.json());
 if (res.served) act(res.verdict, res.evidence, res.receipt); // 'gaining' | 'fading' + cited evidence + receipt
 else skip(res.reason);                                       // abstained: confidence below your bar
