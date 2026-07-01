@@ -1,6 +1,6 @@
 'use strict';
 /**
- * xsignal — app.js  (the deployable x402-paid "signal" ingredient for the agentic economy)
+ * xsignal -app.js  (the deployable x402-paid "signal" ingredient for the agentic economy)
  * ========================================================================================
  * Agents (and humans) get a fresh, scored, CITED real-time X/social signal instead of stale training data.
  *   GET  /signal/preview?q=<topic>   → FREE capped preview (top 3, scores only)
@@ -27,15 +27,15 @@ const BRIEF_PRICE_USD = Number(process.env.XSIGNAL_BRIEF_PRICE_USD || 0.05); // 
 const INTENT_PRICE_USD = Number(process.env.XSIGNAL_INTENT_PRICE_USD || 0.01); // outcome-priced momentum verdict, pay-first (the fee IS the no-fill fee); FLAT price, floor $0.01
 const X402_NETWORK = process.env.X402_NETWORK || 'base'; // base (mainnet, CDP facilitator needs a key) | base-sepolia (testnet, keyless x402.org)
 const FACILITATOR_URL = process.env.FACILITATOR_URL || net(X402_NETWORK).facilitator; // default facilitator per network
-// Mainnet CDP facilitator auth — REUSE MainStreet's existing key (same env var names); never hard-coded.
+// Mainnet CDP facilitator auth -REUSE MainStreet's existing key (same env var names); never hard-coded.
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID || '';
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET || '';
 const SERVER = { name: 'xsignal', version: '0.1.0' };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type, authorization, x-payment, mcp-protocol-version' };
-const json = (res, code, obj, extra) => { res.writeHead(code, { 'content-type': 'application/json', ...CORS, ...(extra || {}) }); res.end(JSON.stringify(obj)); };
+const json = (res, code, obj, extra) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', ...CORS, ...(extra || {}) }); res.end(JSON.stringify(obj)); };
 const body = (req) => new Promise((r) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 1e6) req.destroy(); }); req.on('end', () => { try { r(b ? JSON.parse(b) : {}); } catch { r(null); } }); });
 const sha256 = (s) => 'sha256:' + crypto.createHash('sha256').update(typeof s === 'string' ? s : JSON.stringify(s)).digest('hex');
-// keyless tamper-evidence receipt (the safe residue of the "receipt" vector — hashes, NOT a trustless proof / signature)
+// keyless tamper-evidence receipt (the safe residue of the "receipt" vector -hashes, NOT a trustless proof / signature)
 function makeReceipt(input, output, settlementTx) { return { inputHash: sha256(input), outputHash: sha256(output), issuedAtSec: Math.floor(Date.now() / 1000), settlementTx: settlementTx || null, note: 'Tamper-evidence hashes (keyless), NOT a trustless proof of inference.' }; }
 
 // small DEMO seed so /signal/preview always renders even with no API keys (clearly labelled demo)
@@ -50,9 +50,9 @@ async function getCandidates(a) {
   const key = process.env.X_BEARER_TOKEN || process.env.XAI_API_KEY;
   if (key) {
     try { const c = await fetchCandidates(a.query || 'crypto', { source: process.env.XAI_API_KEY && !process.env.X_BEARER_TOKEN ? 'grok' : a.source, bearerToken: process.env.X_BEARER_TOKEN, apiKey: process.env.XAI_API_KEY, max: 25 }); return { candidates: c, live: true }; }
-    catch (e) { return { candidates: SEED, live: false, note: 'live fetch failed (' + e.message + ') — showing demo seed' }; }
+    catch (e) { return { candidates: SEED, live: false, note: 'live fetch failed (' + e.message + ') - showing demo seed' }; }
   }
-  return { candidates: SEED, live: false, note: 'no X_BEARER_TOKEN / XAI_API_KEY set — showing demo seed' };
+  return { candidates: SEED, live: false, note: 'no X_BEARER_TOKEN / XAI_API_KEY set - showing demo seed' };
 }
 const opForA = (a) => ({ query: a.query || null, terms: Array.isArray(a.terms) ? a.terms : (a.query ? String(a.query).split(/\s+/) : []), limit: Math.min(Number(a.limit) || 10, 25), minScore: a.minScore });
 
@@ -71,7 +71,7 @@ async function getBrief(addr, query) {
 const TOOLS = [
   { name: 'get_signal', description: 'Real-time X/social signal for a topic: scored (virality+freshness) + CITED (source urls), deduped, ranked. Input: query (string) OR candidates[] (bring your own posts), terms?, source?(xsearch|grok), limit?. The live full signal is x402-paid at GET/POST /signal; this tool returns a preview unless candidates are supplied.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, candidates: { type: 'array' }, terms: { type: 'array' }, source: { type: 'string' }, limit: { type: 'integer' } } } },
   { name: 'get_token_intel', description: 'Base token MARKET intel (liquidity, 24h volume, price + change, pool age, buy/sell flow, mechanical flags) from public DEX pools. NOT a trust/safety rating. Input: addr (0x Base token). Full intel is x402-paid at GET/POST /token; this tool returns a preview.', inputSchema: { type: 'object', properties: { addr: { type: 'string' } } } },
-  { name: 'get_token_brief', description: 'A fused MEAL: one call combines Base token MARKET intel (get_token_intel) + real-time social SIGNAL (get_signal) into a single "what is happening with $TOKEN right now" brief — market flags + top CITED social posts + a plain-language, non-advisory summary. Input: addr (0x Base token), query? (topic/symbol; defaults to the token symbol). Full brief is x402-paid at GET/POST /brief; this tool returns a preview.', inputSchema: { type: 'object', properties: { addr: { type: 'string' }, query: { type: 'string' } } } },
+  { name: 'get_token_brief', description: 'A fused MEAL: one call combines Base token MARKET intel (get_token_intel) + real-time social SIGNAL (get_signal) into a single "what is happening with $TOKEN right now" brief -market flags + top CITED social posts + a plain-language, non-advisory summary. Input: addr (0x Base token), query? (topic/symbol; defaults to the token symbol). Full brief is x402-paid at GET/POST /brief; this tool returns a preview.', inputSchema: { type: 'object', properties: { addr: { type: 'string' }, query: { type: 'string' } } } },
   { name: 'get_intent', description: 'OUTCOME-PRICED momentum read that ABSTAINS below your bar. Input: addr (0x Base token), min_confidence (0-1, default 0.6), max_price (USD), question?. Returns a mechanical momentum verdict (gaining/fading) ONLY if confidence >= min_confidence within max_price; otherwise ABSTAINS (no charge). This tool returns the free quote (wouldServe + confidence, verdict hidden); the paid verdict + cited evidence + keyless receipt is at GET/POST /intent.', inputSchema: { type: 'object', properties: { addr: { type: 'string' }, min_confidence: { type: 'number' }, max_price: { type: 'number' }, question: { type: 'string' } } } },
 ];
 
@@ -86,11 +86,11 @@ async function dispatch(msg) {
     const name = params && params.name;
     const a = (params && params.arguments) || {};
     // NO FREE TIER: MCP tools return an x402 PAYMENT POINTER (price + accepts + how to pay), not free data.
-    const PAID = { get_signal: ['/signal', PRICE_USD, 'xsignal — real-time X/social signal'], get_token_intel: ['/token', PRICE_USD, 'xsignal — Base token market intel'], get_token_brief: ['/brief', BRIEF_PRICE_USD, 'xsignal — fused token brief (meal)'], get_intent: ['/intent', INTENT_PRICE_USD, 'xsignal — outcome-priced momentum verdict (may abstain)'] };
+    const PAID = { get_signal: ['/signal', PRICE_USD, 'xsignal - real-time X/social signal'], get_token_intel: ['/token', PRICE_USD, 'xsignal - Base token market intel'], get_token_brief: ['/brief', BRIEF_PRICE_USD, 'xsignal - fused token brief (meal)'], get_intent: ['/intent', INTENT_PRICE_USD, 'xsignal - outcome-priced momentum verdict (may abstain)'] };
     if (PAID[name]) {
       const [resource, price, description] = PAID[name];
       const reqs = paymentRequired({ priceUsd: price, payTo: PAY_TO, resource, description, network: X402_NETWORK });
-      return ok({ content: [{ type: 'text', text: JSON.stringify({ paymentRequired: true, ...reqs, httpEndpoint: resource, note: 'No free tier — pay via x402 at ' + resource + ' (HTTP) to receive the result. ' + price + ' USDC on Base.' }) }], isError: false });
+      return ok({ content: [{ type: 'text', text: JSON.stringify({ paymentRequired: true, ...reqs, httpEndpoint: resource, note: 'No free tier - pay via x402 at ' + resource + ' (HTTP) to receive the result. ' + price + ' USDC on Base.' }) }], isError: false });
     }
     return { jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown tool' } };
   }
@@ -127,27 +127,27 @@ function createServer() {
       // x402-PAID full token intel
       if (url === '/token') {
         const addr = req.method === 'POST' ? ((await body(req) || {}).addr) : qs.get('addr');
-        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal — Base token market intel', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal - Base token market intel', network: X402_NETWORK });
         const v = await verifyPayment(req.headers["x-payment"], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         return json(res, 200, { ...buildTokenIntel(await getToken(addr)), paid: true });
       }
 
-      // x402-PAID fused brief — a MEAL (market intel + social signal fused), priced above a single ingredient
+      // x402-PAID fused brief -a MEAL (market intel + social signal fused), priced above a single ingredient
       if (url === '/brief') {
         const a = req.method === 'POST' ? (await body(req) || {}) : { addr: qs.get('addr'), query: qs.get('q') };
-        const reqs = paymentRequired({ priceUsd: BRIEF_PRICE_USD, payTo: PAY_TO, resource: '/brief', description: 'xsignal — fused token brief (market intel + social signal)', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: BRIEF_PRICE_USD, payTo: PAY_TO, resource: '/brief', description: 'xsignal - fused token brief (market intel + social signal)', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         const { intel, signal, query, live, note } = await getBrief(a.addr, a.query);
         return json(res, 200, { ...buildBrief({ intel, signal, symbol: intel.symbol, query }), live, source_note: note, paid: true });
       }
 
-      // OUTCOME-PRICED intent — x402-PAID (from $0.01), pay-first: then a momentum verdict OR a calibrated ABSTAIN.
+      // OUTCOME-PRICED intent -x402-PAID (from $0.01), pay-first: then a momentum verdict OR a calibrated ABSTAIN.
       // The paid fee IS the no-fill fee (no free quote → no adverse-selection farming). Paid answers carry a keyless receipt.
       if (url === '/intent') {
         const a = req.method === 'POST' ? (await body(req) || {}) : { addr: qs.get('addr'), question: qs.get('question') || qs.get('q'), min_confidence: qs.get('min_confidence') };
-        const reqs = paymentRequired({ priceUsd: INTENT_PRICE_USD, payTo: PAY_TO, resource: '/intent', description: 'xsignal — outcome-priced momentum verdict (may abstain)', network: X402_NETWORK });
+        const reqs = paymentRequired({ priceUsd: INTENT_PRICE_USD, payTo: PAY_TO, resource: '/intent', description: 'xsignal - outcome-priced momentum verdict (may abstain)', network: X402_NETWORK });
         const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         const minConfidence = a.min_confidence != null ? a.min_confidence : a.minConfidence;
@@ -158,7 +158,7 @@ function createServer() {
         return json(res, 200, { ...payload, receipt, paid: true });
       }
 
-      if (req.method === 'GET' && url === '/.well-known/mcp.json') return json(res, 200, { name: SERVER.name, version: SERVER.version, protocolVersion: '2024-11-05', description: 'xsignal — x402-paid real-time X/social signal (scored + cited) for agents.', mcp: { endpoint: baseUrl(req) + '/mcp', transport: 'streamable-http' }, tools: TOOLS.map((t) => ({ name: t.name, description: t.description })), paid: { routes: ['/signal', '/token', '/brief', '/intent'], priceUsd: PRICE_USD, briefPriceUsd: BRIEF_PRICE_USD, intentPriceUsd: INTENT_PRICE_USD, asset: 'USDC', network: 'base', noFreeTier: true } });
+      if (req.method === 'GET' && url === '/.well-known/mcp.json') return json(res, 200, { name: SERVER.name, version: SERVER.version, protocolVersion: '2024-11-05', description: 'xsignal -x402-paid real-time X/social signal (scored + cited) for agents.', mcp: { endpoint: baseUrl(req) + '/mcp', transport: 'streamable-http' }, tools: TOOLS.map((t) => ({ name: t.name, description: t.description })), paid: { routes: ['/signal', '/token', '/brief', '/intent'], priceUsd: PRICE_USD, briefPriceUsd: BRIEF_PRICE_USD, intentPriceUsd: INTENT_PRICE_USD, asset: 'USDC', network: 'base', noFreeTier: true } });
       if (req.method === 'GET' && url === '/.well-known/agent-card.json') return json(res, 200, agentCard(baseUrl(req)));
 
       if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...CORS }); return res.end(landing()); }
@@ -180,20 +180,20 @@ function agentCard(base) {
     payment: { protocol: 'x402', network: 'base', asset: 'USDC', payTo: PAY_TO }, safety: { descriptorOnly: true, signsFunds: false } };
 }
 function landing() {
-  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal — real-time signal for agents</title>
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal, real-time signal for agents</title>
 <style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf4;margin:0;padding:40px 20px;max-width:680px;margin:0 auto;line-height:1.6}
 code{background:#1a2137;padding:2px 7px;border-radius:6px;font-size:13px}.t{background:#131a2e;border:1px solid #26304d;border-radius:14px;padding:18px;margin:14px 0}
 h1{font-size:26px}.px{color:#6ee7b7;font-weight:700}a{color:#7aa2ff}</style></head><body>
-<h1>⚡ xsignal</h1><p>A real-time X/social <b>signal</b> for AI agents — scored (virality + freshness) and <b>cited</b>,
+<h1>⚡ xsignal</h1><p>A real-time X/social <b>signal</b> for AI agents - scored (virality + freshness) and <b>cited</b>,
 instead of stale training data or generic search. Pay per call in <span class="px">USDC on Base via x402</span>. An
 ingredient for the agentic economy.</p>
-<div class="t"><b>No free tier — every call is x402-paid, from ${PRICE_USD} USDC on Base.</b> A funded agent pays in one hop.</div>
-<div class="t"><b>Signal (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /signal?q=base+memecoin</code> — scored + cited real-time X/social signal (text, metrics, all items).</div>
-<div class="t"><b>Token intel (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /token?addr=0x…</code> — liquidity, volume, price, pool age, buy/sell flow + market flags (data, not a trust rating).</div>
-<div class="t"><b>Token brief — a meal (x402-paid, ${BRIEF_PRICE_USD} USDC)</b><br/><code>GET /brief?addr=0x…</code> — one call fuses market intel + social signal into a "what is happening with $TOKEN now" brief (flags + cited posts + summary).</div>
-<div class="t"><b>Intent — outcome-priced (x402-paid, from ${INTENT_PRICE_USD} USDC)</b><br/><code>GET /intent?addr=0x…&min_confidence=0.7</code> — pay-first, then a momentum verdict, or a calibrated <b>abstain</b> if it can't meet your confidence bar (the fee is the no-fill fee).</div>
-<div class="t"><b>Agents</b> — MCP at <code>/mcp</code> (tool <code>get_signal</code>), discovery at <code>/.well-known/mcp.json</code> + <code>/.well-known/agent-card.json</code>.</div>
-<p style="color:#8a97b5;font-size:13px">Signal is scored from public X posts — verify before acting; not financial advice. We never hold keys or move funds.</p></body></html>`;
+<div class="t"><b>No free tier - every call is x402-paid, from ${PRICE_USD} USDC on Base.</b> A funded agent pays in one hop.</div>
+<div class="t"><b>Signal (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /signal?q=base+memecoin</code> - scored + cited real-time X/social signal (text, metrics, all items).</div>
+<div class="t"><b>Token intel (x402-paid, ${PRICE_USD} USDC)</b><br/><code>GET /token?addr=0x…</code> - liquidity, volume, price, pool age, buy/sell flow + market flags (data, not a trust rating).</div>
+<div class="t"><b>Token brief - a meal (x402-paid, ${BRIEF_PRICE_USD} USDC)</b><br/><code>GET /brief?addr=0x…</code> - one call fuses market intel + social signal into a "what is happening with $TOKEN now" brief (flags + cited posts + summary).</div>
+<div class="t"><b>Intent - outcome-priced (x402-paid, from ${INTENT_PRICE_USD} USDC)</b><br/><code>GET /intent?addr=0x…&min_confidence=0.7</code> - pay-first, then a momentum verdict, or a calibrated <b>abstain</b> if it can't meet your confidence bar (the fee is the no-fill fee).</div>
+<div class="t"><b>Agents</b> - MCP at <code>/mcp</code> (tool <code>get_signal</code>), discovery at <code>/.well-known/mcp.json</code> + <code>/.well-known/agent-card.json</code>.</div>
+<p style="color:#8a97b5;font-size:13px">Signal is scored from public X posts - verify before acting; not financial advice. We never hold keys or move funds.</p></body></html>`;
 }
 
 module.exports = { createServer, dispatch, TOOLS };
@@ -222,7 +222,7 @@ if (require.main === module) {
 
       const checks = [
         ['GET /health → ok + paidRoutes + noFreeTier flag', health.status === 200 && JSON.parse(health.body).paidRoutes.includes('/signal') && JSON.parse(health.body).noFreeTier === true],
-        ['GET /signal → 402 (x402 accepts, USDC/base) — paid-only, no free tier', sig402.status === 402 && JSON.parse(sig402.body).accepts[0].network === 'base' && JSON.parse(sig402.body).accepts[0].asset.startsWith('0x833589')],
+        ['GET /signal → 402 (x402 accepts, USDC/base) -paid-only, no free tier', sig402.status === 402 && JSON.parse(sig402.body).accepts[0].network === 'base' && JSON.parse(sig402.body).accepts[0].asset.startsWith('0x833589')],
         ['GET /token → 402 (paid-only)', tok402.status === 402],
         ['GET /brief → 402 (paid-only meal)', brief402.status === 402],
         ['GET /intent → 402 (pay-first; the fee IS the no-fill fee, no free quote)', intent402.status === 402],
