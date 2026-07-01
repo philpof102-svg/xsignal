@@ -34,24 +34,35 @@ function paymentRequired(opts = {}) {
   };
 }
 
-/** Verify + settle an X-PAYMENT via the facilitator. Returns {ok, txHash, reason}. No facilitator/header → not ok (never fakes). */
+/** Verify + settle an X-PAYMENT via the facilitator. Returns {ok, txHash, reason}. No facilitator/header → not ok (never fakes).
+ *  CDP mainnet: pass cdpKeyId + cdpKeySecret → uses @coinbase/x402 createFacilitatorConfig (correct CDP JWT auth, same as
+ *  MainStreet). Keyless (testnet x402.org / custom): pass facilitatorUrl, no cdp creds → no auth. WE never sign. */
 async function verifyPayment(paymentHeader, opts = {}) {
   const fetchImpl = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
   if (!paymentHeader) return { ok: false, reason: 'no X-PAYMENT header' };
-  if (!opts.facilitatorUrl) return { ok: false, reason: 'facilitator not configured (set FACILITATOR_URL)' };
   if (!fetchImpl) return { ok: false, reason: 'no fetch available' };
   let payload;
   try { payload = JSON.parse(Buffer.from(String(paymentHeader), 'base64').toString('utf8')); } // X-PAYMENT = base64 JSON payload
   catch (e) { return { ok: false, reason: 'bad X-PAYMENT header (expected base64 JSON)' }; }
-  const base = opts.facilitatorUrl.replace(/\/$/, '');
-  const headers = { 'content-type': 'application/json', ...(opts.apiKey ? { authorization: 'Bearer ' + opts.apiKey } : {}) };
+  // Facilitator: CDP creds → official @coinbase/x402 config (CDP JWT auth); else keyless url (testnet x402.org / custom).
+  let url = opts.facilitatorUrl, mkAuth = null;
+  if (opts.cdpKeyId && opts.cdpKeySecret) {
+    try { const cfg = require('@coinbase/x402').createFacilitatorConfig(opts.cdpKeyId, opts.cdpKeySecret); url = cfg.url; mkAuth = cfg.createAuthHeaders; }
+    catch (e) { return { ok: false, reason: 'CDP facilitator init failed: ' + (e && e.message || e) }; }
+  }
+  if (!url) return { ok: false, reason: 'facilitator not configured (set FACILITATOR_URL or CDP_API_KEY_ID/SECRET)' };
+  let auth = {};
+  if (mkAuth) { try { auth = (await mkAuth()) || {}; } catch (e) { return { ok: false, reason: 'CDP auth failed: ' + (e && e.message || e) }; } }
+  const base = url.replace(/\/$/, '');
+  const vHeaders = { 'content-type': 'application/json', ...(auth.verify || auth || {}) }; // CDP auth returns {verify,settle}; keyless → {}
+  const sHeaders = { 'content-type': 'application/json', ...(auth.settle || auth || {}) };
   const body = JSON.stringify({ x402Version: 1, paymentPayload: payload, paymentRequirements: opts.requirements });
   try {
-    const vr = await fetchImpl(base + '/verify', { method: 'POST', headers, body });
+    const vr = await fetchImpl(base + '/verify', { method: 'POST', headers: vHeaders, body });
     if (!vr.ok) return { ok: false, reason: 'verify HTTP ' + vr.status };
     const vj = await vr.json();
     if (!vj.isValid) return { ok: false, reason: vj.invalidReason || 'invalid payment' };
-    const sr = await fetchImpl(base + '/settle', { method: 'POST', headers, body });
+    const sr = await fetchImpl(base + '/settle', { method: 'POST', headers: sHeaders, body });
     if (!sr.ok) return { ok: false, reason: 'settle HTTP ' + sr.status };
     const sj = await sr.json();
     if (!sj.success) return { ok: false, reason: sj.errorReason || 'settle failed' };

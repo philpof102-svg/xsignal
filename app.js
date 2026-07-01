@@ -21,7 +21,9 @@ const PAY_TO = process.env.XSIGNAL_PAYTO || '0xAC3ca7c5d3cDD7702fd08F9C4C28dAA22
 const PRICE_USD = Number(process.env.XSIGNAL_PRICE_USD || 0.01);
 const X402_NETWORK = process.env.X402_NETWORK || 'base'; // base (mainnet, CDP facilitator needs a key) | base-sepolia (testnet, keyless x402.org)
 const FACILITATOR_URL = process.env.FACILITATOR_URL || net(X402_NETWORK).facilitator; // default facilitator per network
-const FACILITATOR_KEY = process.env.FACILITATOR_KEY || ''; // required for the mainnet CDP facilitator (never hard-coded)
+// Mainnet CDP facilitator auth — REUSE MainStreet's existing key (same env var names); never hard-coded.
+const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID || '';
+const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET || '';
 const SERVER = { name: 'xsignal', version: '0.1.0' };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type, authorization, x-payment, mcp-protocol-version' };
 const json = (res, code, obj, extra) => { res.writeHead(code, { 'content-type': 'application/json', ...CORS, ...(extra || {}) }); res.end(JSON.stringify(obj)); };
@@ -82,7 +84,7 @@ function createServer() {
     const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
     try {
       if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
-      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token'], freeRoutes: ['/signal/preview', '/token/preview'], payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, facilitatorKeySet: !!FACILITATOR_KEY });
+      if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true, server: SERVER, paidRoutes: ['/signal', '/token'], freeRoutes: ['/signal/preview', '/token/preview'], payTo: PAY_TO, priceUsd: PRICE_USD, network: X402_NETWORK, facilitator: FACILITATOR_URL, cdpKeySet: !!(CDP_API_KEY_ID && CDP_API_KEY_SECRET) });
 
       if (url === '/mcp') {
         if (req.method !== 'POST') return json(res, 405, { error: 'POST JSON-RPC to /mcp' }, { allow: 'POST' });
@@ -103,7 +105,7 @@ function createServer() {
         const a = req.method === 'POST' ? (await body(req) || {}) : { query: qs.get('q'), source: qs.get('source'), limit: qs.get('limit') };
         const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/signal', network: X402_NETWORK });
         const payHeader = req.headers['x-payment'];
-        const v = await verifyPayment(payHeader, { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
+        const v = await verifyPayment(payHeader, { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason }); // pay, then resubmit with X-PAYMENT
         const { candidates, live, note } = await getCandidates(a);
         return json(res, 200, { ...buildSignal(candidates, opForA(a)), live, source_note: note, paid: true });
@@ -118,7 +120,7 @@ function createServer() {
       if (url === '/token') {
         const addr = req.method === 'POST' ? ((await body(req) || {}).addr) : qs.get('addr');
         const reqs = paymentRequired({ priceUsd: PRICE_USD, payTo: PAY_TO, resource: '/token', description: 'xsignal — Base token market intel', network: X402_NETWORK });
-        const v = await verifyPayment(req.headers['x-payment'], { facilitatorUrl: FACILITATOR_URL, apiKey: FACILITATOR_KEY, requirements: reqs.accepts[0] });
+        const v = await verifyPayment(req.headers["x-payment"], { facilitatorUrl: FACILITATOR_URL, cdpKeyId: CDP_API_KEY_ID, cdpKeySecret: CDP_API_KEY_SECRET, requirements: reqs.accepts[0] });
         if (!v.ok) return json(res, 402, { ...reqs, verify: v.reason });
         return json(res, 200, { ...buildTokenIntel(await getToken(addr)), paid: true });
       }

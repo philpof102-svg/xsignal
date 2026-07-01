@@ -7,5 +7,10 @@
     "start": "node app.js",
     "test": "node signal.js && node tokenintel.js && node x402.js && node sources.js && node app.js --selftest"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@coinbase/x402": "^2.1.0"
+  }
 }
