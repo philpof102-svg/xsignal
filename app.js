@@ -269,6 +269,7 @@ function createServer() {
       if (req.method === 'GET' && url === '/.well-known/agent-card.json') return json(res, 200, agentCard(baseUrl(req)));
 
       if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...CORS }); return res.end(landing()); }
+      if (req.method === 'GET' && url === '/pay') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...CORS }); return res.end(payPage()); }
       return json(res, 404, { error: 'not found' });
     } catch (e) { return json(res, 400, { error: e.message }); }
   });
@@ -286,6 +287,59 @@ function agentCard(base) {
       { id: 'token-market-intel', name: 'Base token market intel', description: 'Liquidity/volume/price/age/buy-sell flow + mechanical flags for a Base token (market data, NOT a trust rating). Best as an input to the brief. x402-paid at /token ($0.01; 3 free per wallet via ?wallet=0x…).', endpoint: base + '/token', method: 'GET', pricing: { scheme: 'x402-exact', amount: String(PRICE_USD), currency: 'USDC', network: 'eip155:8453' }, tags: ['x402', 'token', 'base', 'defi', 'market-data'] },
     ],
     payment: { protocol: 'x402', network: 'base', asset: 'USDC', payTo: PAY_TO }, safety: { descriptorOnly: true, signsFunds: false } };
+}
+// /pay — pay any xsignal x402 endpoint from a browser wallet (MetaMask / Coinbase ext).
+// The page NEVER sees a private key: it builds the EIP-3009 TransferWithAuthorization
+// typed data FROM the live 402 challenge (domain name/version, payTo, amount all come
+// from accepts[0]) and asks the injected wallet to sign; settlement stays server-side
+// via the CDP facilitator on the paid re-fetch. Same-origin → no CORS friction.
+function payPage() {
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal · pay from your browser</title>
+<style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf4;margin:0;padding:40px 20px;max-width:680px;margin:0 auto;line-height:1.6}
+h1{font-size:24px}.px{color:#6ee7b7;font-weight:700}a{color:#7aa2ff}
+input,select{width:100%;box-sizing:border-box;background:#131a2e;border:1px solid #26304d;border-radius:10px;color:#e8ecf4;padding:10px;font-size:14px;margin:6px 0}
+button{background:#2f6bff;border:0;border-radius:10px;color:#fff;font-weight:700;padding:12px 18px;font-size:15px;cursor:pointer;margin:8px 0}button:disabled{opacity:.5}
+pre{background:#131a2e;border:1px solid #26304d;border-radius:10px;padding:12px;font-size:12px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.s{color:#93a2c8;font-size:13px}</style></head><body>
+<h1>⚡ xsignal — <span class="px">pay from your browser</span></h1>
+<p class="s">Pick a tool, connect a wallet holding USDC on Base, sign one gasless authorization (EIP-3009 — no ETH needed). Your key never leaves your wallet; this page only builds the request from the live 402 challenge. Don't pay from the payTo wallet itself. Not financial advice.</p>
+<select id="ep">
+<option value="/preflight?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_preflight — safety ⊕ momentum ($0.05)</option>
+<option value="/intent?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_intent — abstaining momentum ($0.01)</option>
+<option value="/brief?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_token_brief — fused brief ($0.05)</option>
+</select>
+<input id="custom" placeholder="…or a custom path, e.g. /preflight?addr=0xYourToken"/>
+<button id="go">Connect wallet &amp; pay</button>
+<div id="log" class="s"></div><pre id="out" style="display:none"></pre>
+<script>
+const log=(m)=>{document.getElementById('log').innerHTML+='<div>'+m+'</div>'};
+const hex=(b)=>'0x'+[...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+document.getElementById('go').onclick=async()=>{
+ const out=document.getElementById('out');out.style.display='none';document.getElementById('log').innerHTML='';
+ try{
+  const eth=window.ethereum; if(!eth){log('❌ No browser wallet found. Install MetaMask or Coinbase Wallet extension.');return;}
+  const path=(document.getElementById('custom').value.trim()||document.getElementById('ep').value);
+  const [from]=await eth.request({method:'eth_requestAccounts'});
+  log('wallet: '+from);
+  try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x2105'}]});}catch(e){log('⚠️ switch to Base refused: '+(e.message||e));}
+  const r0=await fetch(path); if(r0.status!==402){out.style.display='block';out.textContent=await r0.text();log(r0.ok?'✅ served without payment (free probe?)':'unexpected status '+r0.status);return;}
+  const ch=await r0.json(); const a=(ch.accepts||[])[0]; if(!a){log('❌ malformed 402 (no accepts)');return;}
+  log('402: pay '+(Number(a.maxAmountRequired)/1e6)+' USDC → '+a.payTo.slice(0,8)+'… on '+a.network);
+  const nonce=hex(crypto.getRandomValues(new Uint8Array(32)));
+  const auth={from,to:a.payTo,value:String(a.maxAmountRequired),validAfter:'0',validBefore:String(Math.floor(Date.now()/1e3)+600),nonce};
+  const typed={types:{EIP712Domain:[{name:'name',type:'string'},{name:'version',type:'string'},{name:'chainId',type:'uint256'},{name:'verifyingContract',type:'address'}],TransferWithAuthorization:[{name:'from',type:'address'},{name:'to',type:'address'},{name:'value',type:'uint256'},{name:'validAfter',type:'uint256'},{name:'validBefore',type:'uint256'},{name:'nonce',type:'bytes32'}]},primaryType:'TransferWithAuthorization',domain:{name:(a.extra&&a.extra.name)||'USDC',version:(a.extra&&a.extra.version)||'2',chainId:8453,verifyingContract:a.asset},message:auth};
+  log('signing in your wallet…');
+  const signature=await eth.request({method:'eth_signTypedData_v4',params:[from,JSON.stringify(typed)]});
+  const xp=btoa(JSON.stringify({x402Version:1,scheme:a.scheme,network:a.network,payload:{signature,authorization:auth}}));
+  log('paying + fetching…');
+  const r1=await fetch(path,{headers:{'X-PAYMENT':xp}});
+  const body=await r1.text(); out.style.display='block'; out.textContent=body;
+  const pr=r1.headers.get('x-payment-response');
+  if(r1.status===200){log('✅ PAID + SERVED (HTTP 200).'+(pr?' settlement: '+pr:''));}
+  else{log('❌ HTTP '+r1.status+' — payment did not settle (check USDC balance on Base / wallet is an EOA).');}
+ }catch(e){log('❌ '+(e&&e.message||e));}
+};
+</script></body></html>`;
 }
 function landing() {
   return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal, real-time signal for agents</title>
