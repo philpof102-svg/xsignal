@@ -326,7 +326,8 @@ document.getElementById('go').onclick=async()=>{
   const ch=await r0.json(); const a=(ch.accepts||[])[0]; if(!a){log('❌ malformed 402 (no accepts)');return;}
   log('402: pay '+(Number(a.maxAmountRequired)/1e6)+' USDC → '+a.payTo.slice(0,8)+'… on '+a.network);
   const nonce=hex(crypto.getRandomValues(new Uint8Array(32)));
-  const auth={from,to:a.payTo,value:String(a.maxAmountRequired),validAfter:'0',validBefore:String(Math.floor(Date.now()/1e3)+600),nonce};
+  const now=Math.floor(Date.now()/1e3);
+  const auth={from,to:a.payTo,value:String(a.maxAmountRequired),validAfter:String(now-600),validBefore:String(now+(a.maxTimeoutSeconds||60)),nonce};
   const typed={types:{EIP712Domain:[{name:'name',type:'string'},{name:'version',type:'string'},{name:'chainId',type:'uint256'},{name:'verifyingContract',type:'address'}],TransferWithAuthorization:[{name:'from',type:'address'},{name:'to',type:'address'},{name:'value',type:'uint256'},{name:'validAfter',type:'uint256'},{name:'validBefore',type:'uint256'},{name:'nonce',type:'bytes32'}]},primaryType:'TransferWithAuthorization',domain:{name:(a.extra&&a.extra.name)||'USDC',version:(a.extra&&a.extra.version)||'2',chainId:8453,verifyingContract:a.asset},message:auth};
   log('signing in your wallet…');
   const signature=await eth.request({method:'eth_signTypedData_v4',params:[from,JSON.stringify(typed)]});

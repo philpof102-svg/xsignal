@@ -59,11 +59,11 @@ async function verifyPayment(paymentHeader, opts = {}) {
   const body = JSON.stringify({ x402Version: 1, paymentPayload: payload, paymentRequirements: opts.requirements });
   try {
     const vr = await fetchImpl(base + '/verify', { method: 'POST', headers: vHeaders, body });
-    if (!vr.ok) return { ok: false, reason: 'verify HTTP ' + vr.status };
+    if (!vr.ok) { const t = await vr.text().catch(() => ''); return { ok: false, reason: 'verify HTTP ' + vr.status + (t ? ': ' + t.slice(0, 300) : '') }; }
     const vj = await vr.json();
     if (!vj.isValid) return { ok: false, reason: vj.invalidReason || 'invalid payment' };
     const sr = await fetchImpl(base + '/settle', { method: 'POST', headers: sHeaders, body });
-    if (!sr.ok) return { ok: false, reason: 'settle HTTP ' + sr.status };
+    if (!sr.ok) { const t = await sr.text().catch(() => ''); return { ok: false, reason: 'settle HTTP ' + sr.status + (t ? ': ' + t.slice(0, 300) : '') }; }
     const sj = await sr.json();
     if (!sj.success) return { ok: false, reason: sj.errorReason || 'settle failed' };
     return { ok: true, txHash: sj.transaction || sj.txHash || null, reason: 'settled', payer: vj.payer };
