@@ -301,14 +301,14 @@ input,select{width:100%;box-sizing:border-box;background:#131a2e;border:1px soli
 button{background:#2f6bff;border:0;border-radius:10px;color:#fff;font-weight:700;padding:12px 18px;font-size:15px;cursor:pointer;margin:8px 0}button:disabled{opacity:.5}
 pre{background:#131a2e;border:1px solid #26304d;border-radius:10px;padding:12px;font-size:12px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .s{color:#93a2c8;font-size:13px}</style></head><body>
-<h1>⚡ xsignal — <span class="px">pay from your browser</span></h1>
-<p class="s">Pick a tool, connect a wallet holding USDC on Base, sign one gasless authorization (EIP-3009 — no ETH needed). Your key never leaves your wallet; this page only builds the request from the live 402 challenge. Don't pay from the payTo wallet itself. Not financial advice.</p>
+<h1>⚡ xsignal — <span class="px">pay any x402 endpoint from your browser</span></h1>
+<p class="s">Pick an xsignal tool — or paste ANY x402 endpoint URL. Connect a wallet holding USDC on Base, sign one gasless authorization (EIP-3009 — no ETH needed). Your key never leaves your wallet; this page builds the request from the target's live 402 challenge and always shows you the amount + recipient before you sign. Don't pay from the payTo wallet itself. Cross-origin endpoints need open CORS (most agent-first x402 APIs have it). Not financial advice.</p>
 <select id="ep">
 <option value="/preflight?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_preflight — safety ⊕ momentum ($0.05)</option>
 <option value="/intent?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_intent — abstaining momentum ($0.01)</option>
 <option value="/brief?addr=0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed">get_token_brief — fused brief ($0.05)</option>
 </select>
-<input id="custom" placeholder="…or a custom path, e.g. /preflight?addr=0xYourToken"/>
+<input id="custom" placeholder="…or ANY x402 URL: https://api.example.com/paid-thing (or a local path like /preflight?addr=0x…)"/>
 <button id="go">Connect wallet &amp; pay</button>
 <div id="log" class="s"></div><pre id="out" style="display:none"></pre>
 <script>
@@ -318,13 +318,18 @@ document.getElementById('go').onclick=async()=>{
  const out=document.getElementById('out');out.style.display='none';document.getElementById('log').innerHTML='';
  try{
   const eth=window.ethereum; if(!eth){log('❌ No browser wallet found. Install MetaMask or Coinbase Wallet extension.');return;}
-  const path=(document.getElementById('custom').value.trim()||document.getElementById('ep').value);
+  const raw=(document.getElementById('custom').value.trim()||document.getElementById('ep').value);
+  if(/^http:\\/\\//i.test(raw)){log('❌ http:// refused — x402 endpoints must be https.');return;}
+  const target=raw;
+  const host=/^https:\\/\\//i.test(raw)?new URL(raw).host:location.host;
   const [from]=await eth.request({method:'eth_requestAccounts'});
-  log('wallet: '+from);
+  log('wallet: '+from+' · target: '+host);
   try{await eth.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x2105'}]});}catch(e){log('⚠️ switch to Base refused: '+(e.message||e));}
-  const r0=await fetch(path); if(r0.status!==402){out.style.display='block';out.textContent=await r0.text();log(r0.ok?'✅ served without payment (free probe?)':'unexpected status '+r0.status);return;}
-  const ch=await r0.json(); const a=(ch.accepts||[])[0]; if(!a){log('❌ malformed 402 (no accepts)');return;}
-  log('402: pay '+(Number(a.maxAmountRequired)/1e6)+' USDC → '+a.payTo.slice(0,8)+'… on '+a.network);
+  let r0; try{r0=await fetch(target);}catch(e){log('❌ cannot reach '+host+' from the browser (endpoint has no CORS?) — an agent/CLI can still pay it.');return;}
+  if(r0.status!==402){out.style.display='block';out.textContent=await r0.text();log(r0.ok?'✅ served without payment (free probe?)':'unexpected status '+r0.status);return;}
+  const ch=await r0.json(); const a=(ch.accepts||[]).find(x=>x.scheme==='exact'&&(x.network==='base'||x.network==='eip155:8453'))||(ch.accepts||[])[0]; if(!a){log('❌ malformed 402 (no accepts)');return;}
+  if(a.network!=='base'&&a.network!=='eip155:8453'){log('❌ this endpoint wants payment on "'+a.network+'" — this page only pays USDC on Base.');return;}
+  log('402: pay '+(Number(a.maxAmountRequired)/1e6)+' USDC → '+a.payTo.slice(0,8)+'… on '+a.network+' (host: '+host+')');
   const nonce=hex(crypto.getRandomValues(new Uint8Array(32)));
   const now=Math.floor(Date.now()/1e3);
   const auth={from,to:a.payTo,value:String(a.maxAmountRequired),validAfter:String(now-600),validBefore:String(now+(a.maxTimeoutSeconds||60)),nonce};
@@ -333,7 +338,7 @@ document.getElementById('go').onclick=async()=>{
   const signature=await eth.request({method:'eth_signTypedData_v4',params:[from,JSON.stringify(typed)]});
   const xp=btoa(JSON.stringify({x402Version:1,scheme:a.scheme,network:a.network,payload:{signature,authorization:auth}}));
   log('paying + fetching…');
-  const r1=await fetch(path,{headers:{'X-PAYMENT':xp}});
+  const r1=await fetch(target,{headers:{'X-PAYMENT':xp}});
   const body=await r1.text(); out.style.display='block'; out.textContent=body;
   const pr=r1.headers.get('x-payment-response');
   if(r1.status===200){log('✅ PAID + SERVED (HTTP 200).'+(pr?' settlement: '+pr:''));}
