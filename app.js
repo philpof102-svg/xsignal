@@ -348,7 +348,7 @@ document.getElementById('go').onclick=async()=>{
 </script></body></html>`;
 }
 function landing() {
-  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>xsignal, real-time signal for agents</title>
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="talentapp:project_verification" content="669cc9f573ca3333f4a6df55042b2f7035a6dcc2883e4ef93c7dcd0793ee8c1067cefe67fbcf03ac4760c00a4ea4226ebfbb219de3d46adc777926d3fd3082c9"/><title>xsignal, real-time signal for agents</title>
 <style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf4;margin:0;padding:40px 20px;max-width:680px;margin:0 auto;line-height:1.6}
 code{background:#1a2137;padding:2px 7px;border-radius:6px;font-size:13px}.t{background:#131a2e;border:1px solid #26304d;border-radius:14px;padding:18px;margin:14px 0}
 h1{font-size:26px}.px{color:#6ee7b7;font-weight:700}a{color:#7aa2ff}</style></head><body>
