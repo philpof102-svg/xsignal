@@ -23,7 +23,7 @@
     "start": "node app.js",
     "example": "node examples/watchlist-alerter.js",
     "mcp": "node scripts/mcp-server.js",
-    "test": "node signal.js && node tokenintel.js && node brief.js && node intent.js && node x402.js && node sources.js && node sdk/tools.test.js && node app.js --selftest"
+    "test": "node signal.js && node tokenintel.js && node brief.js && node intent.js && node preflight.js && node x402.js && node sources.js && node sdk/tools.test.js && node app.js --selftest"
   },
   "keywords": [
     "mcp",
