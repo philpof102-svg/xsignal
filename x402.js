@@ -12,8 +12,11 @@
  * `node x402.js` runs the self-test.
  */
 const NETWORKS = {
-  base: { usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', facilitator: 'https://api.cdp.coinbase.com/platform/v2/x402' },
-  'base-sepolia': { usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', facilitator: 'https://x402.org/facilitator' },
+  // usdcName MUST match the token contract's EIP-712 domain name() — it differs per network:
+  // Base mainnet USDC name() = "USD Coin"; Base Sepolia's test USDC name() = "USDC".
+  // A wrong name → every TransferWithAuthorization signature recovers to the wrong address → facilitator revert.
+  base: { usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', usdcName: 'USD Coin', facilitator: 'https://api.cdp.coinbase.com/platform/v2/x402' },
+  'base-sepolia': { usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', usdcName: 'USDC', facilitator: 'https://x402.org/facilitator' },
 };
 const net = (n) => NETWORKS[n] || NETWORKS.base;
 
@@ -28,7 +31,7 @@ function paymentRequired(opts = {}) {
     accepts: [{
       scheme: 'exact', network, maxAmountRequired: atomic,
       resource: opts.resource || '/', description: opts.description || 'xsignal', mimeType: 'application/json',
-      payTo: opts.payTo, maxTimeoutSeconds: 60, asset: cfg.usdc, extra: { name: 'USDC', version: '2' },
+      payTo: opts.payTo, maxTimeoutSeconds: 60, asset: cfg.usdc, extra: { name: cfg.usdcName, version: '2' },
     }],
     error: 'X-PAYMENT required: pay ' + priceUsd + ' USDC on ' + network + ', then resubmit with the X-PAYMENT header',
   };
