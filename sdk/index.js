@@ -31,6 +31,10 @@ function client(opts = {}) {
     signal: (query, o = {}) => call(`/signal?q=${encodeURIComponent(query || '')}` + w),
     /** Base token market data from public DEX pools. */
     tokenIntel: (addr) => call(`/token?addr=${addr}` + w),
+    /** composed preflight: MainStreet SAFETY ⊕ xsignal MOMENTUM → one GO/CAUTION/AVOID recommendation. */
+    preflight: (addr) => call(`/preflight?addr=${addr}` + w),
+    /** batch watchlist preflight (up to 10 addrs, comma-separated or array). */
+    screen: (addrs) => call(`/screen?addrs=${encodeURIComponent(Array.isArray(addrs) ? addrs.join(',') : String(addrs || ''))}` + w),
     /** live abstention transparency (not a win-rate). */
     trackRecord: () => call('/track-record'),
     origin: base, wallet,

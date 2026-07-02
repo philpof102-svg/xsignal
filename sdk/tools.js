@@ -36,12 +36,25 @@ const tokenIntelSpec = {
   execute: (a) => client().tokenIntel(a.addr),
 };
 
-const ALL = [intentSpec, briefSpec, signalSpec, tokenIntelSpec];
+const preflightSpec = {
+  name: 'get_preflight',
+  description: 'The Base PREFLIGHT: one call fuses MainStreet on-chain SAFETY (SAFE/WATCH/AVOID + rug flags) with xsignal MOMENTUM (the abstaining read) into a single recommendation (GO/CAUTION/AVOID/AVOID_ENTRY/NEUTRAL/UNVERIFIED) answering "is this token safe to touch AND moving?". Safety GATES momentum. Not financial advice.',
+  parameters: { type: 'object', required: ['addr'], properties: { addr: { type: 'string', description: '0x Base token address' } } },
+  execute: (a) => client().preflight(a.addr),
+};
+const screenSpec = {
+  name: 'get_screen',
+  description: 'Batch watchlist preflight: run the safety⊕momentum preflight over up to 10 Base tokens in one call — per-token verdicts + a summary count + the safeMovers (GO) list. Not financial advice.',
+  parameters: { type: 'object', required: ['addrs'], properties: { addrs: { type: 'string', description: 'comma-separated 0x Base token addresses (max 10)' } } },
+  execute: (a) => client().screen(a.addrs),
+};
+
+const ALL = [intentSpec, briefSpec, signalSpec, tokenIntelSpec, preflightSpec, screenSpec];
 
 // Build tool objects whose execute() is bound to a client with per-call opts ({ wallet, origin, fetch }).
 function withOpts(opts = {}) {
   const c = client(opts);
-  const call = { get_intent: (a) => c.intent(a.addr, { minConfidence: a.min_confidence }), get_token_brief: (a) => c.brief(a.addr, { query: a.query }), get_signal: (a) => c.signal(a.query), get_token_intel: (a) => c.tokenIntel(a.addr) };
+  const call = { get_intent: (a) => c.intent(a.addr, { minConfidence: a.min_confidence }), get_token_brief: (a) => c.brief(a.addr, { query: a.query }), get_signal: (a) => c.signal(a.query), get_token_intel: (a) => c.tokenIntel(a.addr), get_preflight: (a) => c.preflight(a.addr), get_screen: (a) => c.screen(a.addrs) };
   return ALL.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters, execute: call[t.name] }));
 }
 
@@ -60,5 +73,5 @@ function specs() { return ALL.map((t) => ({ name: t.name, description: t.descrip
 /** Direct execute by tool name (opts: { wallet, origin, fetch }). */
 async function execute(name, args, opts = {}) { const t = withOpts(opts).find((x) => x.name === name); if (!t) throw new Error('unknown xsignal tool: ' + name); return t.execute(args || {}); }
 
-module.exports = { openai, anthropic, vercelAiSdk, langchain, mastra, specs, execute, intentSpec, briefSpec, signalSpec, tokenIntelSpec };
+module.exports = { openai, anthropic, vercelAiSdk, langchain, mastra, specs, execute, intentSpec, briefSpec, signalSpec, tokenIntelSpec, preflightSpec, screenSpec };
 module.exports.default = module.exports;

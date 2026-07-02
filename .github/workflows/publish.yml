@@ -33,6 +33,10 @@ jobs:
 
       - name: npm publish
         if: ${{ inputs.dry_run != 'true' }}
+        # continue-on-error: the version may already be published locally (E403
+        # publish-over) or NPM_TOKEN may be absent — the MCP Registry publish
+        # below must still run (github-oidc, no npm token needed).
+        continue-on-error: true
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

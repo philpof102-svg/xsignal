@@ -13,7 +13,7 @@ const opts = { fetch: mockFetch, wallet: '0xabc', origin: 'https://x.test' };
   const vcIntent = await vc.get_intent.execute({ addr: '0xTOKEN', min_confidence: 0.7 });
 
   const checks = [
-    ['4 tools, flagship get_intent first', specs.length === 4 && specs[0].name === 'get_intent'],
+    ['6 tools, flagship get_intent first', specs.length === 6 && specs[0].name === 'get_intent'],
     ['openai shape {type:function, function:{name,parameters}}', oa[0].type === 'function' && oa[0].function.name === 'get_intent' && !!oa[0].function.parameters],
     ['anthropic shape {name, input_schema}', an[0].name === 'get_intent' && !!an[0].input_schema],
     ['vercel shape: record keyed by name with execute + parameters', typeof vc.get_intent.execute === 'function' && !!vc.get_intent.parameters],

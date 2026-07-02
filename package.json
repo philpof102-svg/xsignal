@@ -1,6 +1,6 @@
 {
   "name": "@rakshasar/xsignal",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mcpName": "io.github.philpof102-svg/xsignal",
   "description": "Pay-per-call data ingredients for AI agents on Base (x402/USDC). Flagship get_intent: the only x402 signal that ABSTAINS below your confidence bar instead of guessing. Also a fused token brief, cited X/social signal, and Base token market intel. 3 free calls per wallet, then from $0.01. Verify-only, never signs.",
   "main": "sdk/index.js",

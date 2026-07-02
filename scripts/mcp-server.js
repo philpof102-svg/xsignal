@@ -48,6 +48,16 @@ const TOOLS = [
     inputSchema: { type: 'object', required: ['addr'], properties: { addr: { type: 'string', description: '0x Base token address' } } },
   },
   {
+    name: 'get_preflight',
+    description: 'The Base PREFLIGHT: one call fuses MainStreet on-chain SAFETY (SAFE/WATCH/AVOID + rug flags) with xsignal MOMENTUM (the abstaining read) into a single recommendation (GO/CAUTION/AVOID/AVOID_ENTRY/NEUTRAL/UNVERIFIED) answering "is this token safe to touch AND moving?". Safety GATES momentum. Not financial advice.',
+    inputSchema: { type: 'object', required: ['addr'], properties: { addr: { type: 'string', description: '0x Base token address' } } },
+  },
+  {
+    name: 'get_screen',
+    description: 'Batch watchlist preflight: the safety⊕momentum preflight over up to 10 Base tokens in one call — per-token verdicts + summary counts + the safeMovers (GO) list. Not financial advice.',
+    inputSchema: { type: 'object', required: ['addrs'], properties: { addrs: { type: 'string', description: 'comma-separated 0x Base token addresses (max 10)' } } },
+  },
+  {
     name: 'get_track_record',
     description: 'Live transparency for the abstaining flagship: abstention rate + coverage since restart (descriptive activity, not a win-rate).',
     inputSchema: { type: 'object', properties: {} },
@@ -67,6 +77,8 @@ async function execTool(name, a) {
     case 'get_token_brief': return callApi(`/brief?addr=${a.addr}` + (a.query ? `&q=${encodeURIComponent(a.query)}` : '') + w());
     case 'get_signal': return callApi(`/signal?q=${encodeURIComponent(a.query || '')}` + w());
     case 'get_token_intel': return callApi(`/token?addr=${a.addr}` + w());
+    case 'get_preflight': return callApi(`/preflight?addr=${a.addr}` + w());
+    case 'get_screen': return callApi(`/screen?addrs=${encodeURIComponent(a.addrs || '')}` + w());
     case 'get_track_record': return callApi('/track-record');
     default: throw new Error('unknown tool: ' + name);
   }
