@@ -8,11 +8,12 @@ signs or moves funds.
 ## The tools (flagship first)
 | Tool / route | Price | What you get |
 |---|---|---|
+| **`get_preflight`** · `GET /preflight?addr=0x…` | $0.05 | **The composed Base preflight:** fuses on-chain safety (SAFE/WATCH/AVOID + rug flags, via MainStreet) with momentum into one verdict — GO / CAUTION / AVOID. Safety gates momentum, so it never green-lights a token that can rug. |
 | **`get_intent`** · `GET /intent?addr=0x…&min_confidence=0.7` | $0.01 | An outcome-priced momentum verdict (`gaining`/`fading`) **only if** confidence clears your bar, else a calibrated `abstain`. Paid answers carry a keyless tamper-evidence receipt. |
 | `get_token_brief` · `GET /brief?addr=0x…` | $0.05 | A **meal**: fuses market intel + cited social signal into a "what is happening with $TOKEN now" brief. |
 | `get_signal` · `GET /signal?q=<topic>` | $0.01 | A scored (virality + freshness) and **cited** real-time X/social signal. |
 | `get_token_intel` · `GET /token?addr=0x…` | $0.01 | Base token market data (liquidity/volume/price/age/flow + flags). Best as an input to the brief. |
-| `POST /mcp` | — | MCP (streamable-http): `tools/list` discovers the 4 tools; a `tools/call` returns an x402 **payment pointer**. |
+| `POST /mcp` | — | MCP (streamable-http): `tools/list` discovers the 5 tools; a `tools/call` returns an x402 **payment pointer**. |
 | `GET /health` · `/.well-known/mcp.json` · `/.well-known/agent-card.json` · `/skill.md` | free | health + agent discovery + the installable skill (no data). |
 
 ## Try it free (3 calls per wallet)

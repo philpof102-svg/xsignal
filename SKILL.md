@@ -13,6 +13,7 @@ isn't strong enough, instead of always answering and always charging. **3 free c
 **$0.01**. Verify-only: it never signs or moves your funds.
 
 ## The tools (flagship first)
+- **get_preflight** ($0.05) — the composed Base preflight: on-chain **safety** (SAFE/WATCH/AVOID + rug flags, via MainStreet) ⊕ **momentum** → one verdict (GO/CAUTION/AVOID). Safety gates momentum. Answers "is this token safe to touch AND moving?"
 - **get_intent** ($0.01) — an **outcome-priced momentum verdict that ABSTAINS**. Post `{addr, min_confidence}` → get a
   mechanical `gaining`/`fading` verdict **only if** the signal agreement clears your bar, else a calibrated `abstain`.
   This is the one thing no other x402 signal does (the protocol norm is "always answer, always charge"). Paid answers
